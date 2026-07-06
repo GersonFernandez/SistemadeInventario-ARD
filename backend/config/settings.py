@@ -73,7 +73,7 @@ if os.environ.get('DATABASE_URL'):
         'default': dj_database_url.config(
             default=os.environ.get('DATABASE_URL'),
             conn_max_age=600,
-            ssl_require=True,
+            ssl_require=os.environ.get('DATABASE_SSL_REQUIRE', 'False').lower() in ('true', '1', 'yes'),
         )
     }
 else:
@@ -145,8 +145,18 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
 }
 
-SESSION_COOKIE_AGE = 900  # 15 minutes
+SESSION_COOKIE_AGE = int(os.environ.get('SESSION_COOKIE_AGE', '900'))
 SESSION_SAVE_EVERY_REQUEST = True
+
+# Email settings (console backend in development; SMTP configurable in production)
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '1025'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False').lower() in ('true', '1', 'yes')
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@armada.local')
 
 # Security settings (enabled in production via environment variables)
 SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'False').lower() in ('true', '1', 'yes')

@@ -11,6 +11,7 @@ Sistema full-stack para la gestión de inventario, órdenes de trabajo y custodi
 - [Instalación local](#instalación-local)
   - [Backend](#backend)
   - [Frontend](#frontend)
+   - [Docker Compose](#docker-compose)
 - [Uso](#uso)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Política de ramas](#política-de-ramas)
@@ -30,7 +31,8 @@ Este sistema permite al taller de electrónica:
 
 ## Características
 
-- **Autenticación y autorización:** JWT con tokens de 15 minutos, roles (admin, almacenista, técnico) y cierre de sesión por inactividad.
+- **Autenticación y autorización:** JWT con tokens de sesión configurables, roles (admin, almacenista, técnico) y cierre de sesión por inactividad.
+- **Seguridad de acceso:** cambio de contraseña con confirmación por correo, restablecimiento administrativo con contraseña temporal y notificación al registrar técnicos.
 - **Inventario:** categorías, artículos, movimientos de stock, carga de imágenes, alertas de stock crítico, reportes PDF/Excel.
 - **Órdenes de trabajo:** numeración `OT-YYYY-XXXXX`, solicitud/aprobación/consumo de repuestos, entrega con nota digital.
 - **Herramientas:** préstamos diarios, devoluciones, bajas permanentes y detección de vencimientos.
@@ -101,6 +103,75 @@ npm run dev
 ```
 
 El frontend estará disponible en `http://localhost:5173/`.
+
+### Docker Compose
+
+Levanta backend + frontend + PostgreSQL con un solo comando:
+
+```bash
+docker compose up --build
+```
+
+También puedes usar scripts de arranque:
+
+```bash
+# Linux/macOS/Git Bash
+./start-docker.sh
+
+# PowerShell
+./start-docker.ps1
+```
+
+Servicios expuestos:
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8001/api/v1/`
+- Swagger/OpenAPI: `http://localhost:8001/api/v1/docs/`
+- PostgreSQL: `localhost:5432`
+
+### Docker Producción
+
+Se incluye un perfil de producción con:
+
+- Sin bind mounts de código.
+- Frontend compilado y servido por Nginx.
+- Proxy de Nginx para `/api`, `/media` y `/static` hacia backend.
+- Healthchecks y orden de arranque por salud.
+
+Archivos relevantes:
+
+- `docker-compose.prod.yml`
+- `.env.prod.example`
+- `frontend/Dockerfile.prod`
+- `frontend/nginx.prod.conf`
+
+Pasos:
+
+```bash
+# 1) Crear archivo de entorno de producción
+cp .env.prod.example .env.prod
+
+# 2) Editar secretos y dominio real en .env.prod
+
+# 3) Levantar perfil de producción
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+Scripts incluidos:
+
+```bash
+# Linux/macOS/Git Bash
+./start-docker-prod.sh
+
+# PowerShell
+./start-docker-prod.ps1
+```
+
+Ver estado:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+```
 
 ## Uso
 
@@ -252,9 +323,20 @@ Push a main
 - `CLAUDE.md` — Contexto y convenciones para agentes de IA.
 - `DESIGN.md` — Sistema de diseño y guías visuales.
 - `SPEC.md` — Especificación funcional detallada.
+- `MANUAL_USUARIO.md` — Manual de usuario básico del sistema.
 - `.planning/PROJECT.md` — Visión general del proyecto.
 - `.planning/ROADMAP.md` — Hoja de ruta y fases completadas.
 - `.planning/STATE.md` — Estado actual del proyecto.
+
+## Endpoints clave
+
+- `POST /api/v1/auth/change-password/` — Cambio de contraseña del usuario autenticado.
+- `POST /api/v1/auth/admin-reset-password/` — Restablecimiento administrativo de contraseña.
+- `GET|PUT /api/v1/settings/session/` — Consulta/actualiza el timeout global de sesión.
+- `GET /api/v1/work-orders/despachos/{id}/receipt/?type=pdf` — Comprobante de despacho imprimible con firmas.
+- `POST /api/v1/inventory/item-loans/{id}/return_unit/` — Registro de devolución de préstamo.
+- `POST /api/v1/inventory/item-loans/{id}/extend/` — Extensión de préstamos.
+- `GET /api/v1/inventory/item-loans/report/?type=pdf` — Reporte de préstamos con firmas.
 
 ## Licencia
 

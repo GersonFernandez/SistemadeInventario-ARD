@@ -41,6 +41,10 @@ class Solicitante(DirtyFieldsMixin, models.Model):
             return f"{self.rank} {self.name}"
         return self.name
 
+    @property
+    def full_name(self):
+        return f"{self.rank} {self.name}".strip() if self.rank else self.name
+
 
 class Despacho(DirtyFieldsMixin, models.Model):
     """Vale de despacho de almacén: entrega de items a un solicitante.

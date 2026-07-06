@@ -14,6 +14,21 @@ export const inventoryApi = {
   updateCategory: (id, data) => api.put(`/inventory/categories/${id}/`, data),
   deleteCategory: (id) => api.delete(`/inventory/categories/${id}/`),
 
+  getBrands: (params = {}) => api.get('/inventory/brands/', { params }),
+  createBrand: (data) => api.post('/inventory/brands/', data),
+  updateBrand: (id, data) => api.put(`/inventory/brands/${id}/`, data),
+  deleteBrand: (id) => api.delete(`/inventory/brands/${id}/`),
+
+  getProductModels: (params = {}) => api.get('/inventory/product-models/', { params }),
+  createProductModel: (data) => api.post('/inventory/product-models/', data),
+  updateProductModel: (id, data) => api.put(`/inventory/product-models/${id}/`, data),
+  deleteProductModel: (id) => api.delete(`/inventory/product-models/${id}/`),
+
+  getProductStates: (params = {}) => api.get('/inventory/product-states/', { params }),
+  createProductState: (data) => api.post('/inventory/product-states/', data),
+  updateProductState: (id, data) => api.put(`/inventory/product-states/${id}/`, data),
+  deleteProductState: (id) => api.delete(`/inventory/product-states/${id}/`),
+
   getLocationTypes: (params = {}) => api.get('/inventory/location-types/', { params }),
   getLocationType: (id) => api.get(`/inventory/location-types/${id}/`),
   createLocationType: (data) => api.post('/inventory/location-types/', data),
@@ -54,10 +69,6 @@ export const inventoryApi = {
     responseType: 'blob',
   }),
 
-  getItemLoans: (params = {}) => api.get('/inventory/item-loans/', { params }),
-  createItemLoan: (data) => api.post('/inventory/item-loans/', data),
-  returnItemLoan: (id) => api.post(`/inventory/item-loans/${id}/return_unit/`, {}),
-
   getStockMovements: (params = {}) => api.get('/inventory/stock-movements/', { params }),
   createStockMovement: (data) => api.post('/inventory/stock-movements/', data),
 
@@ -66,6 +77,30 @@ export const inventoryApi = {
   createTransfer: (data) => api.post('/inventory/transfers/', data),
   approveTransfer: (id) => api.post(`/inventory/transfers/${id}/approve/`, {}),
   rejectTransfer: (id) => api.post(`/inventory/transfers/${id}/reject/`, {}),
+
+  getRepairs: (params = {}) => api.get('/inventory/repairs/', { params }),
+  createRepair: (data) => api.post('/inventory/repairs/', data),
+  updateRepair: (id, data) => api.put(`/inventory/repairs/${id}/`, data),
+  deleteRepair: (id) => api.delete(`/inventory/repairs/${id}/`),
+
+  getInstallations: (params = {}) => api.get('/inventory/installations/', { params }),
+  createInstallation: (data) => api.post('/inventory/installations/', data),
+  updateInstallation: (id, data) => api.put(`/inventory/installations/${id}/`, data),
+  deleteInstallation: (id) => api.delete(`/inventory/installations/${id}/`),
+
+  getProductEntries: (params = {}) => api.get('/inventory/product-entries/', { params }),
+  createProductEntryBatch: (payload, attachments = []) => {
+    const formData = new FormData()
+    formData.append('payload', JSON.stringify(payload))
+    attachments.forEach((file) => formData.append('attachments', file))
+    return api.post('/inventory/product-entries/create_batch/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  downloadProductEntryReceipt: (receptionId, format = 'pdf') => api.get('/inventory/product-entries/receipt/', {
+    params: { reception_id: receptionId, type: format },
+    responseType: 'blob',
+  }),
 }
 
 export const getMediaUrl = (path) => {

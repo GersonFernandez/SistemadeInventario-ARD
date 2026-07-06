@@ -3,7 +3,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.contrib.auth import get_user_model
-from .serializers import UserSerializer, UserCreateSerializer, CustomTokenObtainPairSerializer
+from django.utils.crypto import get_random_string
+from django.core.mail import send_mail
+from django.conf import settings
+from .models import SystemSetting
+from .serializers import (
+    UserSerializer,
+    UserCreateSerializer,
+    CustomTokenObtainPairSerializer,
+    PasswordChangeSerializer,
+    AdminResetPasswordSerializer,
+    SystemSettingSerializer,
+)
 from .permissions import IsAlmacenista
 
 User = get_user_model()
@@ -28,7 +39,83 @@ class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        data = UserSerializer(request.user).data
+        data['session_timeout_minutes'] = SystemSetting.get_solo().session_timeout_minutes
+        return Response(data)
+
+
+class PasswordChangeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save(update_fields=['password'])
+
+        send_mail(
+            subject='Cambio de contraseña confirmado',
+            message=(
+                f'Hola {request.user.name},\n\n'
+                'Tu contraseña fue cambiada correctamente.\n'
+                'Si no realizaste este cambio, contacta al administrador de inmediato.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[request.user.email],
+            fail_silently=True,
+        )
+        return Response({'detail': 'Contraseña actualizada y confirmación enviada por correo.'})
+
+
+class AdminResetPasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAlmacenista]
+
+    def post(self, request):
+        if request.user.role != 'admin':
+            return Response({'detail': 'Solo administradores pueden restablecer contraseñas.'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = AdminResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            user = User.objects.get(id=serializer.validated_data['user_id'])
+        except User.DoesNotExist:
+            return Response({'detail': 'Usuario no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        temporary_password = get_random_string(length=12)
+        user.set_password(temporary_password)
+        user.save(update_fields=['password'])
+
+        send_mail(
+            subject='Restablecimiento de contraseña',
+            message=(
+                f'Hola {user.name},\n\n'
+                'Un administrador restableció tu contraseña.\n'
+                f'Contraseña temporal: {temporary_password}\n\n'
+                'Debes cambiarla en tu próximo acceso.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+        return Response({'detail': 'Contraseña temporal enviada por correo al usuario.'})
+
+
+class SystemSettingView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        setting = SystemSetting.get_solo()
+        return Response(SystemSettingSerializer(setting).data)
+
+    def put(self, request):
+        if request.user.role != 'admin':
+            return Response({'detail': 'Solo administradores pueden modificar la configuración.'}, status=status.HTTP_403_FORBIDDEN)
+        setting = SystemSetting.get_solo()
+        serializer = SystemSettingSerializer(setting, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -39,3 +126,14 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return UserCreateSerializer
         return UserSerializer
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        password = self.request.data.get('password')
+        if password:
+            instance.set_password(password)
+            instance.save(update_fields=['password'])
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])

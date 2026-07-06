@@ -33,10 +33,7 @@ def merge_duplicate_parts(apps, schema_editor):
 
         for extra in parts[1:]:
             extra.status = 'rejected'
-            extra.rejection_reason = (
-                'Fusionado por migración: se consolidó con la solicitud más reciente.'
-            )
-            extra.save(update_fields=['status', 'rejection_reason'])
+            extra.save(update_fields=['status'])
             AuditLog.objects.create(
                 action='UPDATE',
                 model_name='workorders.workorderpart',

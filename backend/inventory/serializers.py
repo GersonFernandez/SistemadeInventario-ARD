@@ -1,6 +1,22 @@
 from rest_framework import serializers
 from django.core.validators import FileExtensionValidator
-from .models import Category, Location, LocationType, Item, StockMovement, Transfer, ItemUnit, ItemLoan
+from .models import (
+    Category,
+    Brand,
+    ProductModel,
+    ProductState,
+    Location,
+    LocationType,
+    Item,
+    StockMovement,
+    Transfer,
+    ItemUnit,
+    ItemLoan,
+    RepairRecord,
+    InstallationRecord,
+    EntradaProducto,
+    EntradaProductoAttachment,
+)
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -8,6 +24,29 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ['id', 'name', 'abbreviation', 'description', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+
+class BrandSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Brand
+        fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ProductModelSerializer(serializers.ModelSerializer):
+    brand_name = serializers.CharField(source='brand.name', read_only=True)
+
+    class Meta:
+        model = ProductModel
+        fields = ['id', 'brand', 'brand_name', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'brand_name']
+
+
+class ProductStateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductState
+        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class LocationTypeSerializer(serializers.ModelSerializer):
@@ -170,6 +209,9 @@ class ItemListSerializer(serializers.ModelSerializer):
     stock_available = serializers.IntegerField(read_only=True)
     stock_loaned = serializers.IntegerField(read_only=True)
     stock_asignado = serializers.IntegerField(read_only=True)
+    brand_name = serializers.CharField(source='brand.name', read_only=True)
+    product_model_name = serializers.CharField(source='product_model.name', read_only=True)
+    state_name = serializers.CharField(source='state.name', read_only=True)
     units_count = serializers.SerializerMethodField()
     availability_state = serializers.SerializerMethodField()
     availability_state_display = serializers.SerializerMethodField()
@@ -178,6 +220,7 @@ class ItemListSerializer(serializers.ModelSerializer):
         model = Item
         fields = [
             'id', 'name', 'code', 'sku', 'part_number', 'marca', 'modelo', 'numero_serie',
+            'brand', 'brand_name', 'product_model', 'product_model_name', 'state', 'state_name',
             'category', 'category_name', 'application', 'location', 'location_display',
             'kind', 'kind_display', 'track_by_serial',
             'quantity', 'minimum_stock', 'unit', 'stock_available', 'stock_loaned', 'stock_asignado',
@@ -230,12 +273,16 @@ class ItemDetailSerializer(serializers.ModelSerializer):
     stock_available = serializers.IntegerField(read_only=True)
     stock_loaned = serializers.IntegerField(read_only=True)
     stock_asignado = serializers.IntegerField(read_only=True)
+    brand_name = serializers.CharField(source='brand.name', read_only=True)
+    product_model_name = serializers.CharField(source='product_model.name', read_only=True)
+    state_name = serializers.CharField(source='state.name', read_only=True)
     units = ItemUnitSerializer(many=True, read_only=True)
 
     class Meta:
         model = Item
         fields = [
             'id', 'name', 'code', 'sku', 'part_number', 'marca', 'modelo', 'numero_serie',
+            'brand', 'brand_name', 'product_model', 'product_model_name', 'state', 'state_name',
             'category', 'category_name', 'description', 'application',
             'location', 'location_display', 'location_breadcrumb',
             'kind', 'kind_display', 'track_by_serial',
@@ -345,3 +392,99 @@ class TransferSerializer(serializers.ModelSerializer):
             'id', 'requested_by', 'approved_by', 'status',
             'created_at', 'updated_at', 'completed_at',
         ]
+
+
+class RepairRecordSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    technician_name = serializers.CharField(source='technician.name', read_only=True)
+    repairs_count_for_item = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RepairRecord
+        fields = [
+            'id', 'item', 'item_name', 'technician', 'technician_name',
+            'details', 'repaired_at', 'attachment', 'is_active',
+            'repairs_count_for_item', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'repairs_count_for_item', 'technician_name', 'item_name']
+
+    def get_repairs_count_for_item(self, obj):
+        return obj.item.repair_records.filter(is_active=True).count()
+
+
+class InstallationRecordSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    technician_name = serializers.CharField(source='technician.name', read_only=True)
+    location_name = serializers.CharField(source='location.name', read_only=True)
+
+    class Meta:
+        model = InstallationRecord
+        fields = [
+            'id', 'item', 'item_name', 'technician', 'technician_name',
+            'location', 'location_name', 'installed_at', 'notes', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'item_name', 'technician_name', 'location_name']
+
+
+class EntradaProductoAttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.FileField(source='file', read_only=True)
+
+    class Meta:
+        model = EntradaProductoAttachment
+        fields = ['id', 'reception_id', 'file', 'file_url', 'description', 'uploaded_by', 'created_at']
+        read_only_fields = ['id', 'uploaded_by', 'created_at', 'file_url']
+
+
+class EntradaProductoSerializer(serializers.ModelSerializer):
+    marca_name = serializers.CharField(source='marca.name', read_only=True)
+    modelo_name = serializers.CharField(source='modelo.name', read_only=True)
+    categoria_name = serializers.CharField(source='categoria.name', read_only=True)
+    ubicacion_name = serializers.CharField(source='ubicacion.name', read_only=True)
+    registrado_por_name = serializers.CharField(source='registrado_por.name', read_only=True)
+    adjuntos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EntradaProducto
+        fields = [
+            'id', 'reception_id',
+            'marca', 'marca_name', 'modelo', 'modelo_name',
+            'categoria', 'categoria_name',
+            'tipo', 'cantidad', 'seriales',
+            'ubicacion', 'ubicacion_name', 'observaciones',
+            'fecha_recepcion', 'fecha_entrada',
+            'registrado_por', 'registrado_por_name',
+            'adjuntos',
+        ]
+        read_only_fields = ['id', 'fecha_entrada', 'registrado_por', 'registrado_por_name', 'adjuntos']
+
+    def get_adjuntos(self, obj):
+        files = EntradaProductoAttachment.objects.filter(reception_id=obj.reception_id)
+        return EntradaProductoAttachmentSerializer(files, many=True).data
+
+
+class EntradaProductoLineInputSerializer(serializers.Serializer):
+    tipo = serializers.ChoiceField(choices=EntradaProducto.Tipo.choices)
+    marca = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('marca').remote_field.model.objects.filter(is_active=True))
+    modelo = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('modelo').remote_field.model.objects.filter(is_active=True))
+    categoria = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('categoria').remote_field.model.objects.all())
+    cantidad = serializers.IntegerField(min_value=1)
+    seriales = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
+    observaciones = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if attrs['modelo'].brand_id != attrs['marca'].id:
+            raise serializers.ValidationError({'modelo': 'El modelo no pertenece a la marca seleccionada.'})
+        return attrs
+
+
+class EntradaProductoBatchCreateSerializer(serializers.Serializer):
+    fecha_recepcion = serializers.DateTimeField(required=False)
+    ubicacion = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('ubicacion').remote_field.model.objects.all())
+    observaciones = serializers.CharField(required=False, allow_blank=True)
+    lineas = EntradaProductoLineInputSerializer(many=True)
+
+    def validate_lineas(self, value):
+        if not value:
+            raise serializers.ValidationError('Debe enviar al menos una línea de producto.')
+        return value

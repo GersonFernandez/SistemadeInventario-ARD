@@ -19,9 +19,12 @@ const roleColors = {
 export default function UsersPage() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(15)
+  const [savingSession, setSavingSession] = useState(false)
 
   useEffect(() => {
     fetchUsers()
+    fetchSessionSetting()
   }, [])
 
   const fetchUsers = async () => {
@@ -37,14 +40,46 @@ export default function UsersPage() {
     }
   }
 
+  const fetchSessionSetting = async () => {
+    try {
+      const { data } = await userApi.getSessionSetting()
+      setSessionTimeoutMinutes(data.session_timeout_minutes)
+    } catch (error) {
+      console.error('Error al cargar configuración de sesión', error)
+    }
+  }
+
   const handleDelete = async (id) => {
-    if (!confirm('¿Está seguro de eliminar este usuario?')) return
+    if (!confirm('¿Desea deshabilitar este usuario?')) return
     try {
       await userApi.deleteUser(id)
-      toast.success('Usuario eliminado')
+      toast.success('Usuario deshabilitado')
       fetchUsers()
     } catch (error) {
-      toast.error('Error al eliminar el usuario')
+      toast.error('Error al deshabilitar el usuario')
+    }
+  }
+
+  const handleResetPassword = async (id) => {
+    if (!confirm('Se enviará una contraseña temporal al correo del usuario. ¿Continuar?')) return
+    try {
+      await userApi.adminResetPassword(id)
+      toast.success('Contraseña temporal enviada por correo.')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'No se pudo restablecer la contraseña')
+    }
+  }
+
+  const handleSaveSessionTimeout = async () => {
+    setSavingSession(true)
+    try {
+      await userApi.updateSessionSetting({ session_timeout_minutes: Number(sessionTimeoutMinutes) })
+      localStorage.setItem('sessionTimeoutMinutes', String(sessionTimeoutMinutes))
+      toast.success('Tiempo de sesión actualizado')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'No se pudo actualizar la sesión')
+    } finally {
+      setSavingSession(false)
     }
   }
 
@@ -59,6 +94,28 @@ export default function UsersPage() {
           <PlusIcon className="h-4 w-4" />
           Nuevo usuario
         </Link>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <h3 className="text-sm font-semibold text-gray-800">Configuración de sesión</h3>
+        <p className="mt-1 text-xs text-gray-500">Minutos de inactividad antes de cerrar sesión automáticamente.</p>
+        <div className="mt-3 flex items-center gap-3">
+          <input
+            type="number"
+            min="5"
+            max="240"
+            value={sessionTimeoutMinutes}
+            onChange={(e) => setSessionTimeoutMinutes(e.target.value)}
+            className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          <button
+            onClick={handleSaveSessionTimeout}
+            disabled={savingSession}
+            className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50"
+          >
+            {savingSession ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -108,10 +165,16 @@ export default function UsersPage() {
                       Editar
                     </Link>
                     <button
+                      onClick={() => handleResetPassword(user.id)}
+                      className="ml-4 text-amber-600 hover:text-amber-900"
+                    >
+                      Reset contraseña
+                    </button>
+                    <button
                       onClick={() => handleDelete(user.id)}
                       className="ml-4 text-red-600 hover:text-red-900"
                     >
-                      Eliminar
+                      Deshabilitar
                     </button>
                   </td>
                 </tr>

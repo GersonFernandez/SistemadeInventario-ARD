@@ -3,15 +3,36 @@ from django.db.models import Q, Max
 from django.http import FileResponse
 from django.utils import timezone
 from datetime import datetime
+import json
+import uuid
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, NumberFilter
 from django_filters import rest_framework as django_filters
 from utils.reports import build_report
-from .models import Category, Location, LocationType, Item, StockMovement, Transfer, ItemUnit, ItemLoan
+from .models import (
+    Category,
+    Brand,
+    ProductModel,
+    ProductState,
+    Location,
+    LocationType,
+    Item,
+    StockMovement,
+    Transfer,
+    ItemUnit,
+    ItemLoan,
+    RepairRecord,
+    InstallationRecord,
+    EntradaProducto,
+    EntradaProductoAttachment,
+)
 from .serializers import (
     CategorySerializer,
+    BrandSerializer,
+    ProductModelSerializer,
+    ProductStateSerializer,
     LocationSerializer,
     LocationTypeSerializer,
     LocationTypeSimpleSerializer,
@@ -22,8 +43,13 @@ from .serializers import (
     ItemUnitSerializer,
     ItemUnitCreateSerializer,
     ItemLoanSerializer,
+    RepairRecordSerializer,
+    InstallationRecordSerializer,
+    EntradaProductoSerializer,
+    EntradaProductoAttachmentSerializer,
+    EntradaProductoBatchCreateSerializer,
 )
-from .permissions import IsAlmacenistaOrAdmin
+from .permissions import IsAlmacenistaOrAdmin, IsAdminAlmacenistaOrTecnico
 
 
 class ItemFilter(FilterSet):
@@ -40,6 +66,42 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+
+
+class BrandViewSet(viewsets.ModelViewSet):
+    queryset = Brand.objects.all()
+    serializer_class = BrandSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['is_active']
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class ProductModelViewSet(viewsets.ModelViewSet):
+    queryset = ProductModel.objects.select_related('brand').all()
+    serializer_class = ProductModelSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['is_active', 'brand']
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class ProductStateViewSet(viewsets.ModelViewSet):
+    queryset = ProductState.objects.all()
+    serializer_class = ProductStateSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['is_active']
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
 
 
 class LocationTypeViewSet(viewsets.ModelViewSet):
@@ -117,7 +179,7 @@ class LocationViewSet(viewsets.ModelViewSet):
 
 
 class ItemViewSet(viewsets.ModelViewSet):
-    queryset = Item.objects.select_related('category', 'location').all()
+    queryset = Item.objects.select_related('category', 'location', 'brand', 'product_model', 'state').all()
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemFilter
@@ -626,7 +688,11 @@ class ItemLoanViewSet(viewsets.ModelViewSet):
             title_suffix = ' (Histórico)'
 
         buffer = build_report(
-            'Reporte de Asignaciones' + title_suffix, headers, rows, fmt
+            'Reporte de Prestamos de Herramientas' + title_suffix,
+            headers,
+            rows,
+            fmt,
+            include_signatures=True,
         )
         content_type = (
             'application/pdf' if fmt == 'pdf'
@@ -637,6 +703,259 @@ class ItemLoanViewSet(viewsets.ModelViewSet):
         return FileResponse(
             buffer,
             as_attachment=True,
-            filename=f"asignaciones_{ts}.{extension}",
+            filename=f"prestamos_{ts}.{extension}",
             content_type=content_type,
         )
+
+
+class RepairRecordViewSet(viewsets.ModelViewSet):
+    queryset = RepairRecord.objects.select_related('item', 'technician').all()
+    serializer_class = RepairRecordSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminAlmacenistaOrTecnico]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['item', 'technician', 'is_active']
+
+    def perform_create(self, serializer):
+        technician = serializer.validated_data.get('technician') or self.request.user
+        repair = serializer.save(technician=technician)
+
+        in_repair_state = ProductState.objects.filter(code='en_reparacion').first()
+        if in_repair_state:
+            repair.item.state = in_repair_state
+            repair.item.save(update_fields=['state'])
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class InstallationRecordViewSet(viewsets.ModelViewSet):
+    queryset = InstallationRecord.objects.select_related('item', 'technician', 'location').all()
+    serializer_class = InstallationRecordSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminAlmacenistaOrTecnico]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['item', 'technician', 'location', 'is_active']
+
+    def perform_create(self, serializer):
+        technician = serializer.validated_data.get('technician') or self.request.user
+        installation = serializer.save(technician=technician)
+
+        installed_state = ProductState.objects.filter(code='instalado').first()
+        installation.item.location = installation.location
+        if installed_state:
+            installation.item.state = installed_state
+            installation.item.save(update_fields=['location', 'state'])
+        else:
+            installation.item.save(update_fields=['location'])
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class EntradaProductoFilter(FilterSet):
+    marca = NumberFilter(field_name='marca__id')
+    modelo = NumberFilter(field_name='modelo__id')
+    tipo = django_filters.CharFilter(field_name='tipo')
+    fecha_recepcion = django_filters.DateFromToRangeFilter(field_name='fecha_recepcion')
+
+    class Meta:
+        model = EntradaProducto
+        fields = ['marca', 'modelo', 'tipo', 'fecha_recepcion']
+
+
+class EntradaProductoViewSet(viewsets.ModelViewSet):
+    queryset = EntradaProducto.objects.select_related(
+        'marca', 'modelo', 'categoria', 'ubicacion', 'registrado_por'
+    ).all()
+    serializer_class = EntradaProductoSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = EntradaProductoFilter
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        reception_id = self.request.query_params.get('reception_id')
+        if reception_id:
+            queryset = queryset.filter(reception_id=reception_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(registrado_por=self.request.user)
+
+    @action(detail=False, methods=['post'])
+    def create_batch(self, request):
+        payload = request.data.get('payload')
+        if payload:
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                return Response({'detail': 'El payload JSON es inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            payload = request.data
+
+        serializer = EntradaProductoBatchCreateSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+
+        reception_id = f"REC-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
+        fecha_recepcion = serializer.validated_data.get('fecha_recepcion') or timezone.now()
+        ubicacion = serializer.validated_data['ubicacion']
+        observaciones_global = serializer.validated_data.get('observaciones', '')
+        lineas = serializer.validated_data['lineas']
+
+        created = []
+        with transaction.atomic():
+            for idx, linea in enumerate(lineas, start=1):
+                try:
+                    seriales = self._prepare_seriales(
+                        tipo=linea['tipo'],
+                        cantidad=linea['cantidad'],
+                        seriales=linea.get('seriales') or [],
+                        marca=linea['marca'].name,
+                        modelo=linea['modelo'].name,
+                        index_offset=idx,
+                    )
+                except ValueError as exc:
+                    transaction.set_rollback(True)
+                    return Response(
+                        {'detail': f'Línea {idx}: {exc}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                entrada = EntradaProducto.objects.create(
+                    reception_id=reception_id,
+                    marca=linea['marca'],
+                    modelo=linea['modelo'],
+                    categoria=linea['categoria'],
+                    tipo=linea['tipo'],
+                    cantidad=linea['cantidad'],
+                    seriales=seriales,
+                    ubicacion=ubicacion,
+                    observaciones=(linea.get('observaciones') or observaciones_global or ''),
+                    fecha_recepcion=fecha_recepcion,
+                    registrado_por=request.user,
+                )
+                created.append(entrada)
+                self._register_inventory_for_line(entrada)
+
+            for uploaded in request.FILES.getlist('attachments'):
+                EntradaProductoAttachment.objects.create(
+                    reception_id=reception_id,
+                    file=uploaded,
+                    uploaded_by=request.user,
+                )
+
+        result = EntradaProductoSerializer(created, many=True)
+        return Response({'reception_id': reception_id, 'lineas': result.data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def receipt(self, request):
+        reception_id = request.query_params.get('reception_id')
+        fmt = request.query_params.get('type', 'pdf')
+
+        if not reception_id:
+            return Response({'detail': 'reception_id es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        if fmt not in ('pdf', 'excel'):
+            return Response({'detail': 'Formato inválido. Use pdf o excel.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        entries = self.get_queryset().filter(reception_id=reception_id).order_by('id')
+        if not entries.exists():
+            return Response({'detail': 'No se encontraron líneas para esta recepción.'}, status=status.HTTP_404_NOT_FOUND)
+
+        first = entries.first()
+        headers = ['Recepción', 'Fecha', 'Tipo', 'Marca', 'Modelo', 'Categoría', 'Cantidad', 'Seriales', 'Ubicación']
+        rows = []
+        for entry in entries:
+            rows.append([
+                entry.reception_id,
+                entry.fecha_recepcion.strftime('%d/%m/%Y %H:%M'),
+                entry.get_tipo_display(),
+                entry.marca.name,
+                entry.modelo.name,
+                entry.categoria.name,
+                entry.cantidad,
+                ', '.join(entry.seriales) if entry.seriales else '—',
+                entry.ubicacion.get_breadcrumb(),
+            ])
+
+        buffer = build_report(
+            f'Comprobante de Recepción {reception_id}',
+            headers,
+            rows,
+            fmt,
+            include_signatures=True,
+        )
+        content_type = 'application/pdf' if fmt == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        extension = 'pdf' if fmt == 'pdf' else 'xlsx'
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f"recepcion_{reception_id}.{extension}",
+            content_type=content_type,
+        )
+
+    def _prepare_seriales(self, tipo, cantidad, seriales, marca, modelo, index_offset=1):
+        cleaned = [s.strip() for s in seriales if str(s).strip()]
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError('Hay seriales duplicados en la misma línea.')
+
+        if tipo == EntradaProducto.Tipo.USADO and not cleaned:
+            cleaned = self._generate_seriales(cantidad, marca, modelo, index_offset)
+        elif cleaned and len(cleaned) != cantidad:
+            raise ValueError('La cantidad de seriales debe coincidir con la cantidad de unidades.')
+
+        return cleaned
+
+    def _generate_seriales(self, cantidad, marca, modelo, index_offset):
+        base = timezone.now().strftime('%Y%m%d%H%M%S')
+        mark = ''.join([c for c in marca.upper() if c.isalnum()])[:4] or 'MRCA'
+        model = ''.join([c for c in modelo.upper() if c.isalnum()])[:4] or 'MODL'
+        return [f"AUT-{mark}-{model}-{base}-{index_offset + i:02d}" for i in range(cantidad)]
+
+    def _register_inventory_for_line(self, entrada):
+        item_name = f"{entrada.marca.name} {entrada.modelo.name}".strip()
+        item, _ = Item.objects.get_or_create(
+            name=item_name,
+            category=entrada.categoria,
+            defaults={
+                'location': entrada.ubicacion,
+                'kind': Item.Kind.HERRAMIENTA if entrada.tipo == EntradaProducto.Tipo.USADO else Item.Kind.CONSUMIBLE,
+                'track_by_serial': entrada.tipo == EntradaProducto.Tipo.USADO,
+                'marca': entrada.marca.name,
+                'modelo': entrada.modelo.name,
+                'brand': entrada.marca,
+                'product_model': entrada.modelo,
+                'quantity': 0,
+                'minimum_stock': 0,
+                'unit': 'unidad',
+            },
+        )
+
+        if item.brand_id != entrada.marca.id or item.product_model_id != entrada.modelo.id:
+            item.brand = entrada.marca
+            item.product_model = entrada.modelo
+            item.marca = entrada.marca.name
+            item.modelo = entrada.modelo.name
+            item.save(update_fields=['brand', 'product_model', 'marca', 'modelo'])
+
+        item.location = entrada.ubicacion
+        item.quantity += entrada.cantidad
+        if entrada.tipo == EntradaProducto.Tipo.USADO:
+            item.track_by_serial = True
+            item.kind = Item.Kind.HERRAMIENTA
+        item.save(update_fields=['location', 'quantity', 'track_by_serial', 'kind'])
+
+        StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.MovementType.ENTRY,
+            quantity=entrada.cantidad,
+            document_type=StockMovement.DocumentType.DIRECTO,
+            document_number=entrada.reception_id,
+            notes=f"Recepción de mercancía ({entrada.get_tipo_display()})",
+        )
+
+        if entrada.seriales and item.track_by_serial:
+            existing = set(ItemUnit.objects.filter(item=item).values_list('serial_number', flat=True))
+            for serial in entrada.seriales:
+                if serial not in existing:
+                    ItemUnit.objects.create(item=item, serial_number=serial, notes=f"Alta por recepción {entrada.reception_id}")

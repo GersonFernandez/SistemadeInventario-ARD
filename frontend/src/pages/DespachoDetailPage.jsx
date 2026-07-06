@@ -63,6 +63,21 @@ export default function DespachoDetailPage() {
     return user?.role === 'admin' || user?.role === 'almacenista'
   }
 
+  const handleDownloadReceipt = async () => {
+    try {
+      const response = await despachoApi.downloadReceipt(id, 'pdf')
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `comprobante_despacho_${despacho.ot_number}.pdf`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error('No se pudo descargar el comprobante')
+    }
+  }
+
   if (loading) return <p className="text-gray-600">Cargando...</p>
   if (!despacho) return <p className="text-gray-600">Despacho no encontrado.</p>
 
@@ -82,6 +97,13 @@ export default function DespachoDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadReceipt}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <PrinterIcon className="h-4 w-4" />
+            Comprobante
+          </button>
           <span
             className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
               stateStyles[despacho.status] || 'bg-gray-100 text-gray-800'

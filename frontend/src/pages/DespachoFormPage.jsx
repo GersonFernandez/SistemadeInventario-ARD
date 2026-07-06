@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { TrashIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -19,7 +19,7 @@ export default function DespachoFormPage() {
   const [locations, setLocations] = useState([])
   const [submitting, setSubmitting] = useState(false)
 
-  useState(() => {
+  useEffect(() => {
     inventoryApi.getLocations().then((r) => setLocations(r.data.results || r.data))
   }, [])
 

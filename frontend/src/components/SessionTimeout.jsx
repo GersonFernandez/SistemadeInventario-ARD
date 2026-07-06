@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 
-const SESSION_TIMEOUT = 15 * 60 * 1000 // 15 minutes
 const WARNING_TIME = 60 * 1000 // 1 minute warning
 
 export default function SessionTimeout() {
@@ -11,8 +10,14 @@ export default function SessionTimeout() {
   const timeoutRef = useRef(null)
   const warningRef = useRef(null)
 
+  const getSessionTimeoutMs = () => {
+    const minutes = Number(localStorage.getItem('sessionTimeoutMinutes') || 15)
+    return Math.max(5, minutes) * 60 * 1000
+  }
+
   const resetTimer = () => {
     if (!isAuthenticated) return
+    const sessionTimeout = getSessionTimeoutMs()
 
     clearTimeout(timeoutRef.current)
     clearTimeout(warningRef.current)
@@ -20,12 +25,12 @@ export default function SessionTimeout() {
 
     warningRef.current = setTimeout(() => {
       setShowWarning(true)
-    }, SESSION_TIMEOUT - WARNING_TIME)
+    }, Math.max(sessionTimeout - WARNING_TIME, 1000))
 
     timeoutRef.current = setTimeout(() => {
       logout()
       toast.error('Su sesión ha expirado por inactividad')
-    }, SESSION_TIMEOUT)
+    }, sessionTimeout)
   }
 
   useEffect(() => {

@@ -1,0 +1,36 @@
+COMANDOS DOCKER - SISTEMA DE INVENTARIO
+
+DEV - actualizar contenedores (normal)
+cd /c/Projecto/SistemadeInventario-ARD
+docker compose pull
+docker compose up -d --build --wait
+docker compose ps
+
+DEV - actualizacion forzada (recrear todo)
+cd /c/Projecto/SistemadeInventario-ARD
+docker compose down
+docker compose up -d --build --force-recreate --wait
+docker compose ps
+
+DEV - actualizacion limpia (BORRA volumenes, pierde datos de DB)
+cd /c/Projecto/SistemadeInventario-ARD
+docker compose down -v
+docker compose up -d --build --wait
+docker compose ps
+
+PROD - actualizar contenedores
+cd /c/Projecto/SistemadeInventario-ARD
+docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+
+PROD - actualizacion forzada (recrear todo)
+cd /c/Projecto/SistemadeInventario-ARD
+docker compose --env-file .env.prod -f docker-compose.prod.yml down
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --force-recreate --wait
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+
+Solo backend (dev), util cuando cambias Django
+cd /c/Projecto/SistemadeInventario-ARD
+docker compose up -d --build --no-deps backend
+docker compose ps

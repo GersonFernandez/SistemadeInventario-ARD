@@ -55,3 +55,23 @@ class User(DirtyFieldsMixin, AbstractBaseUser, PermissionsMixin):
     @property
     def is_tecnico(self):
         return self.role == self.Role.TECNICO
+
+
+class SystemSetting(models.Model):
+    """Configuración global editable por administradores."""
+
+    singleton_key = models.CharField(max_length=50, unique=True, default='global')
+    session_timeout_minutes = models.PositiveIntegerField(default=15)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'configuración del sistema'
+        verbose_name_plural = 'configuración del sistema'
+
+    def __str__(self):
+        return f"Configuración global ({self.session_timeout_minutes} min)"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(singleton_key='global')
+        return obj

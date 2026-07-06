@@ -10,6 +10,14 @@ import {
   TagIcon,
   MapPinIcon,
   ArrowsRightLeftIcon,
+  KeyIcon,
+  UserCircleIcon,
+  WrenchScrewdriverIcon,
+  CircleStackIcon,
+  ArrowUpTrayIcon,
+  ArchiveBoxArrowDownIcon,
+  RectangleGroupIcon,
+  SquaresPlusIcon,
 } from '@heroicons/react/24/outline'
 import { useAuth } from '../context/AuthContext'
 import SessionTimeout from './SessionTimeout'
@@ -18,10 +26,18 @@ import GlobalSearch from './GlobalSearch'
 const navigation = [
   { name: 'Inicio', href: '/', icon: HomeIcon },
   { name: 'Inventario', href: '/inventory', icon: CubeIcon },
+  { name: 'Recepción', href: '/reception', icon: ArchiveBoxArrowDownIcon, staffOnly: true },
   { name: 'Ubicaciones', href: '/locations', icon: MapPinIcon },
   { name: 'Categorías', href: '/categories', icon: TagIcon },
+  { name: 'Mantenimiento Marcas', href: '/brands-maintenance', icon: RectangleGroupIcon, staffOnly: true },
+  { name: 'Mantenimiento Modelos', href: '/models-maintenance', icon: SquaresPlusIcon, staffOnly: true },
+  { name: 'Catálogos', href: '/product-catalogs', icon: CircleStackIcon, staffOnly: true },
+  { name: 'Reparaciones', href: '/repairs', icon: WrenchScrewdriverIcon, staffOnly: true },
+  { name: 'Instalaciones', href: '/installations', icon: ArrowUpTrayIcon, staffOnly: true },
   { name: 'Despachos', href: '/despachos', icon: ClipboardDocumentListIcon },
+  { name: 'Solicitantes', href: '/solicitantes', icon: UserCircleIcon, staffOnly: true },
   { name: 'Asignaciones', href: '/asignaciones', icon: ArrowsRightLeftIcon, staffOnly: true },
+  { name: 'Seguridad', href: '/security', icon: KeyIcon },
   { name: 'Auditoría', href: '/audit', icon: ShieldCheckIcon, adminOnly: true },
   { name: 'Usuarios', href: '/users', icon: UsersIcon, adminOnly: true },
 ]

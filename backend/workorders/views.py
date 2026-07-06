@@ -64,6 +64,10 @@ class SolicitanteViewSet(viewsets.ModelViewSet):
 
         return queryset.order_by('name')[:50]
 
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
 
 class DespachoViewSet(viewsets.ModelViewSet):
     """Despachos de almacén. Creación inmediata y atómica via DispatchService.
@@ -194,5 +198,41 @@ class DespachoViewSet(viewsets.ModelViewSet):
             buffer,
             as_attachment=True,
             filename=f"despachos_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{extension}",
+            content_type=content_type,
+        )
+
+    @action(detail=True, methods=['get'])
+    def receipt(self, request, pk=None):
+        despacho = self.get_object()
+        format = request.query_params.get('type', 'pdf')
+        if format not in ('pdf', 'excel'):
+            return Response({'detail': 'Formato inválido. Use pdf o excel.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        headers = ['DV', 'Artículo', 'Código', 'Serial', 'Cantidad', 'Solicitante', 'Fecha']
+        rows = []
+        for linea in despacho.lineas.all():
+            rows.append([
+                despacho.ot_number,
+                linea.item.name,
+                linea.item.code or '—',
+                linea.item_unit.serial_number if linea.item_unit else '—',
+                linea.quantity,
+                despacho.solicitante.name,
+                despacho.issued_at.strftime('%d/%m/%Y %H:%M'),
+            ])
+
+        buffer = build_report(
+            f'Comprobante de Despacho {despacho.ot_number}',
+            headers,
+            rows,
+            format,
+            include_signatures=True,
+        )
+        content_type = 'application/pdf' if format == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        extension = 'pdf' if format == 'pdf' else 'xlsx'
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f"comprobante_{despacho.ot_number}.{extension}",
             content_type=content_type,
         )

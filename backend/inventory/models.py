@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.conf import settings
+from django.utils import timezone
 from dirtyfields import DirtyFieldsMixin
 
 
@@ -14,6 +15,59 @@ class Category(models.Model):
         verbose_name = 'categoría'
         verbose_name_plural = 'categorías'
         ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Brand(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'marca'
+        verbose_name_plural = 'marcas'
+
+    def __str__(self):
+        return self.name
+
+
+class ProductModel(models.Model):
+    brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='models')
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['brand__name', 'name']
+        verbose_name = 'modelo'
+        verbose_name_plural = 'modelos'
+        constraints = [
+            models.UniqueConstraint(fields=['brand', 'name'], name='unique_product_model_per_brand'),
+        ]
+
+    def __str__(self):
+        return f"{self.brand.name} - {self.name}"
+
+
+class ProductState(models.Model):
+    code = models.CharField(max_length=40, unique=True)
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'estado de producto'
+        verbose_name_plural = 'estados de producto'
 
     def __str__(self):
         return self.name
@@ -117,6 +171,27 @@ class Item(DirtyFieldsMixin, models.Model):
         help_text='SKU del sistema anterior (legado)',
     )
     part_number = models.CharField(max_length=100, blank=True)
+    brand = models.ForeignKey(
+        Brand,
+        on_delete=models.SET_NULL,
+        related_name='items',
+        null=True,
+        blank=True,
+    )
+    product_model = models.ForeignKey(
+        ProductModel,
+        on_delete=models.SET_NULL,
+        related_name='items',
+        null=True,
+        blank=True,
+    )
+    state = models.ForeignKey(
+        ProductState,
+        on_delete=models.SET_NULL,
+        related_name='items',
+        null=True,
+        blank=True,
+    )
     marca = models.CharField(
         max_length=100,
         blank=True,
@@ -467,3 +542,89 @@ class ItemLoan(DirtyFieldsMixin, models.Model):
         super().save(*args, **kwargs)
         if is_new:
             self.item_unit.assign(user_session=self.loaned_by)
+
+
+class RepairRecord(DirtyFieldsMixin, models.Model):
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='repair_records')
+    technician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='repairs')
+    details = models.TextField()
+    repaired_at = models.DateTimeField(default=timezone.now)
+    attachment = models.FileField(upload_to='repairs/%Y/%m/', null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-repaired_at']
+        verbose_name = 'reparación'
+        verbose_name_plural = 'reparaciones'
+
+    def __str__(self):
+        return f"Reparación {self.item.name} por {self.technician.name}"
+
+
+class InstallationRecord(DirtyFieldsMixin, models.Model):
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='installation_records')
+    technician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='installations')
+    location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='installations')
+    installed_at = models.DateTimeField(default=timezone.now)
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-installed_at']
+        verbose_name = 'instalación'
+        verbose_name_plural = 'instalaciones'
+
+    def __str__(self):
+        return f"Instalación {self.item.name} en {self.location.name}"
+
+
+class EntradaProducto(DirtyFieldsMixin, models.Model):
+    class Tipo(models.TextChoices):
+        NUEVO = 'nuevo', 'Nuevo'
+        USADO = 'usado', 'Usado/Reparación'
+
+    reception_id = models.CharField(max_length=40, db_index=True)
+    marca = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='entradas_producto')
+    modelo = models.ForeignKey(ProductModel, on_delete=models.PROTECT, related_name='entradas_producto')
+    categoria = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='entradas_producto')
+    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    seriales = models.JSONField(default=list, blank=True)
+    ubicacion = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='entradas_producto')
+    observaciones = models.TextField(blank=True)
+    fecha_recepcion = models.DateTimeField(default=timezone.now)
+    fecha_entrada = models.DateTimeField(auto_now_add=True)
+    registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='entradas_producto')
+
+    class Meta:
+        verbose_name = 'entrada de producto'
+        verbose_name_plural = 'entradas de producto'
+        ordering = ['-fecha_recepcion', '-id']
+        indexes = [
+            models.Index(fields=['reception_id', '-fecha_recepcion']),
+            models.Index(fields=['tipo', '-fecha_recepcion']),
+            models.Index(fields=['marca', 'modelo', '-fecha_recepcion']),
+        ]
+
+    def __str__(self):
+        return f"{self.reception_id} - {self.marca.name} {self.modelo.name} x{self.cantidad}"
+
+
+class EntradaProductoAttachment(models.Model):
+    reception_id = models.CharField(max_length=40, db_index=True)
+    file = models.FileField(upload_to='recepciones/%Y/%m/')
+    description = models.CharField(max_length=120, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='entrada_producto_adjuntos')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'adjunto de entrada'
+        verbose_name_plural = 'adjuntos de entrada'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Adjunto {self.reception_id}"

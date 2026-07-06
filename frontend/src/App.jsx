@@ -17,6 +17,14 @@ import UserFormPage from './pages/UserFormPage'
 import CategoriesPage from './pages/CategoriesPage'
 import LocationsPage from './pages/LocationsPage'
 import PrintLabelPage from './pages/PrintLabelPage'
+import SecurityPage from './pages/SecurityPage'
+import SolicitantesPage from './pages/SolicitantesPage'
+import ProductCatalogsPage from './pages/ProductCatalogsPage'
+import RepairsPage from './pages/RepairsPage'
+import InstallationsPage from './pages/InstallationsPage'
+import ReceptionPage from './pages/ReceptionPage'
+import BrandsMaintenancePage from './pages/BrandsMaintenancePage'
+import ModelsMaintenancePage from './pages/ModelsMaintenancePage'
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth()
@@ -61,6 +69,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <InventoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reception"
+        element={
+          <ProtectedRoute>
+            <ReceptionPage />
           </ProtectedRoute>
         }
       />
@@ -113,6 +129,54 @@ export default function App() {
         }
       />
       <Route
+        path="/security"
+        element={
+          <ProtectedRoute>
+            <SecurityPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/product-catalogs"
+        element={
+          <ProtectedRoute>
+            <ProductCatalogsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/brands-maintenance"
+        element={
+          <ProtectedRoute>
+            <BrandsMaintenancePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/models-maintenance"
+        element={
+          <ProtectedRoute>
+            <ModelsMaintenancePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/repairs"
+        element={
+          <ProtectedRoute>
+            <RepairsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/installations"
+        element={
+          <ProtectedRoute>
+            <InstallationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/workorders"
         element={
           <ProtectedRoute>
@@ -149,6 +213,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DespachosPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/solicitantes"
+        element={
+          <ProtectedRoute>
+            <SolicitantesPage />
           </ProtectedRoute>
         }
       />

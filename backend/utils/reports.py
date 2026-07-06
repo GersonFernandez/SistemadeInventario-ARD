@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 
-def _build_pdf_response(title, headers, rows):
+def _build_pdf_response(title, headers, rows, include_signatures=False):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
     styles = getSampleStyleSheet()
@@ -40,6 +40,19 @@ def _build_pdf_response(title, headers, rows):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
     elements.append(table)
+
+    if include_signatures:
+        elements.append(Spacer(1, 28))
+        signature_headers = ['Entregado por', 'Recibido por']
+        signature_rows = [['', ''], ['______________________________', '______________________________']]
+        sig_table = Table([signature_headers] + signature_rows, colWidths=[280, 280])
+        sig_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(sig_table)
 
     doc.build(elements)
     buffer.seek(0)
@@ -87,9 +100,9 @@ def _build_excel_response(title, headers, rows):
     return buffer
 
 
-def build_report(title, headers, rows, format='pdf'):
+def build_report(title, headers, rows, format='pdf', include_signatures=False):
     if format == 'pdf':
-        return _build_pdf_response(title, headers, rows)
+        return _build_pdf_response(title, headers, rows, include_signatures=include_signatures)
     elif format == 'excel':
         return _build_excel_response(title, headers, rows)
     raise ValueError("Format must be 'pdf' or 'excel'")

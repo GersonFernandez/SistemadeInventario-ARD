@@ -19,6 +19,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await api.get('/auth/me/')
       setUser(data)
+      if (data.session_timeout_minutes) {
+        localStorage.setItem('sessionTimeoutMinutes', String(data.session_timeout_minutes))
+      }
     } catch (error) {
       console.error('Failed to load user', error)
       logout()
@@ -35,6 +38,9 @@ export const AuthProvider = ({ children }) => {
     const { data } = await api.post('/auth/login/', { email, password })
     localStorage.setItem('accessToken', data.access)
     localStorage.setItem('refreshToken', data.refresh)
+    if (data.session_timeout_minutes) {
+      localStorage.setItem('sessionTimeoutMinutes', String(data.session_timeout_minutes))
+    }
     await loadUser()
     return data
   }
@@ -50,6 +56,7 @@ export const AuthProvider = ({ children }) => {
     }
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
+    localStorage.removeItem('sessionTimeoutMinutes')
     setUser(null)
   }
 
