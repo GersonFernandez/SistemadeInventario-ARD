@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 
-def _build_pdf_response(title, headers, rows, include_signatures=False):
+def _build_pdf_response(title, headers, rows, include_signatures=False, signature_names=None, metadata_lines=None):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
     styles = getSampleStyleSheet()
@@ -23,6 +23,10 @@ def _build_pdf_response(title, headers, rows, include_signatures=False):
         f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         styles['Normal']
     ))
+    if metadata_lines:
+        elements.append(Spacer(1, 10))
+        for line in metadata_lines:
+            elements.append(Paragraph(line, styles['Normal']))
     elements.append(Spacer(1, 20))
 
     data = [headers] + rows
@@ -43,8 +47,10 @@ def _build_pdf_response(title, headers, rows, include_signatures=False):
 
     if include_signatures:
         elements.append(Spacer(1, 28))
+        delivered_name = (signature_names or {}).get('delivered_by', '')
+        received_name = (signature_names or {}).get('received_by', '')
         signature_headers = ['Entregado por', 'Recibido por']
-        signature_rows = [['', ''], ['______________________________', '______________________________']]
+        signature_rows = [[delivered_name, received_name], ['______________________________', '______________________________']]
         sig_table = Table([signature_headers] + signature_rows, colWidths=[280, 280])
         sig_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -100,9 +106,16 @@ def _build_excel_response(title, headers, rows):
     return buffer
 
 
-def build_report(title, headers, rows, format='pdf', include_signatures=False):
+def build_report(title, headers, rows, format='pdf', include_signatures=False, signature_names=None, metadata_lines=None):
     if format == 'pdf':
-        return _build_pdf_response(title, headers, rows, include_signatures=include_signatures)
+        return _build_pdf_response(
+            title,
+            headers,
+            rows,
+            include_signatures=include_signatures,
+            signature_names=signature_names,
+            metadata_lines=metadata_lines,
+        )
     elif format == 'excel':
         return _build_excel_response(title, headers, rows)
     raise ValueError("Format must be 'pdf' or 'excel'")

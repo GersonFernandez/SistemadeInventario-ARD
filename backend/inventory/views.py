@@ -799,8 +799,11 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
 
         reception_id = f"REC-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
         fecha_recepcion = serializer.validated_data.get('fecha_recepcion') or timezone.now()
-        ubicacion = serializer.validated_data['ubicacion']
         observaciones_global = serializer.validated_data.get('observaciones', '')
+        entregado_por_nombre = serializer.validated_data['entregado_por_nombre']
+        entregado_por_apellido = serializer.validated_data['entregado_por_apellido']
+        entregado_por_cedula = serializer.validated_data['entregado_por_cedula']
+        entregado_por_rango_cargo = serializer.validated_data['entregado_por_rango_cargo']
         lineas = serializer.validated_data['lineas']
 
         created = []
@@ -830,18 +833,47 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                     tipo=linea['tipo'],
                     cantidad=linea['cantidad'],
                     seriales=seriales,
-                    ubicacion=ubicacion,
                     observaciones=(linea.get('observaciones') or observaciones_global or ''),
+                    entregado_por_nombre=entregado_por_nombre,
+                    entregado_por_apellido=entregado_por_apellido,
+                    entregado_por_cedula=entregado_por_cedula,
+                    entregado_por_rango_cargo=entregado_por_rango_cargo,
                     fecha_recepcion=fecha_recepcion,
                     registrado_por=request.user,
                 )
                 created.append(entrada)
                 self._register_inventory_for_line(entrada)
 
+            for uploaded in request.FILES.getlist('photos'):
+                EntradaProductoAttachment.objects.create(
+                    reception_id=reception_id,
+                    file=uploaded,
+                    attachment_type=EntradaProductoAttachment.AttachmentType.FOTO,
+                    uploaded_by=request.user,
+                )
+
+            for uploaded in request.FILES.getlist('documents'):
+                EntradaProductoAttachment.objects.create(
+                    reception_id=reception_id,
+                    file=uploaded,
+                    attachment_type=EntradaProductoAttachment.AttachmentType.DOCUMENTO,
+                    uploaded_by=request.user,
+                )
+
+            for uploaded in request.FILES.getlist('signed_receipt'):
+                EntradaProductoAttachment.objects.create(
+                    reception_id=reception_id,
+                    file=uploaded,
+                    attachment_type=EntradaProductoAttachment.AttachmentType.COMPROBANTE_FIRMADO,
+                    uploaded_by=request.user,
+                )
+
+            # Backward compatibility: generic attachments list is treated as documentos.
             for uploaded in request.FILES.getlist('attachments'):
                 EntradaProductoAttachment.objects.create(
                     reception_id=reception_id,
                     file=uploaded,
+                    attachment_type=EntradaProductoAttachment.AttachmentType.DOCUMENTO,
                     uploaded_by=request.user,
                 )
 
@@ -863,7 +895,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'No se encontraron líneas para esta recepción.'}, status=status.HTTP_404_NOT_FOUND)
 
         first = entries.first()
-        headers = ['Recepción', 'Fecha', 'Tipo', 'Marca', 'Modelo', 'Categoría', 'Cantidad', 'Seriales', 'Ubicación']
+        headers = ['Recepción', 'Fecha', 'Tipo', 'Marca', 'Modelo', 'Categoría', 'Cantidad', 'Seriales', 'Observaciones']
         rows = []
         for entry in entries:
             rows.append([
@@ -875,7 +907,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                 entry.categoria.name,
                 entry.cantidad,
                 ', '.join(entry.seriales) if entry.seriales else '—',
-                entry.ubicacion.get_breadcrumb(),
+                entry.observaciones or '—',
             ])
 
         buffer = build_report(
@@ -884,6 +916,16 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             rows,
             fmt,
             include_signatures=True,
+            signature_names={
+                'delivered_by': f"{first.entregado_por_nombre} {first.entregado_por_apellido} ({first.entregado_por_rango_cargo})",
+                'received_by': first.registrado_por.name,
+            },
+            metadata_lines=[
+                f"Entregado por: {first.entregado_por_nombre} {first.entregado_por_apellido}",
+                f"Cédula: {first.entregado_por_cedula}",
+                f"Rango/Cargo: {first.entregado_por_rango_cargo}",
+                f"Recibido por: {first.registrado_por.name}",
+            ],
         )
         content_type = 'application/pdf' if fmt == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         extension = 'pdf' if fmt == 'pdf' else 'xlsx'
@@ -893,6 +935,33 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             filename=f"recepcion_{reception_id}.{extension}",
             content_type=content_type,
         )
+
+    @action(detail=False, methods=['post'])
+    def upload_signed_receipt(self, request):
+        reception_id = request.data.get('reception_id') or request.query_params.get('reception_id')
+        if not reception_id:
+            return Response({'detail': 'reception_id es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        entries = self.get_queryset().filter(reception_id=reception_id)
+        if not entries.exists():
+            return Response({'detail': 'No se encontró la recepción indicada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        uploaded_files = request.FILES.getlist('signed_receipt') or request.FILES.getlist('file')
+        if not uploaded_files:
+            return Response({'detail': 'Debe adjuntar al menos un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        created = []
+        for uploaded in uploaded_files:
+            attachment = EntradaProductoAttachment.objects.create(
+                reception_id=reception_id,
+                file=uploaded,
+                attachment_type=EntradaProductoAttachment.AttachmentType.COMPROBANTE_FIRMADO,
+                uploaded_by=request.user,
+            )
+            created.append(attachment)
+
+        data = EntradaProductoAttachmentSerializer(created, many=True, context={'request': request}).data
+        return Response({'reception_id': reception_id, 'adjuntos': data}, status=status.HTTP_201_CREATED)
 
     def _prepare_seriales(self, tipo, cantidad, seriales, marca, modelo, index_offset=1):
         cleaned = [s.strip() for s in seriales if str(s).strip()]
@@ -938,12 +1007,17 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             item.modelo = entrada.modelo.name
             item.save(update_fields=['brand', 'product_model', 'marca', 'modelo'])
 
-        item.location = entrada.ubicacion
+        if entrada.ubicacion:
+            item.location = entrada.ubicacion
         item.quantity += entrada.cantidad
         if entrada.tipo == EntradaProducto.Tipo.USADO:
             item.track_by_serial = True
             item.kind = Item.Kind.HERRAMIENTA
-        item.save(update_fields=['location', 'quantity', 'track_by_serial', 'kind'])
+
+        update_fields = ['quantity', 'track_by_serial', 'kind']
+        if entrada.ubicacion:
+            update_fields.append('location')
+        item.save(update_fields=update_fields)
 
         StockMovement.objects.create(
             item=item,

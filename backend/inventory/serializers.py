@@ -432,7 +432,7 @@ class EntradaProductoAttachmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = EntradaProductoAttachment
-        fields = ['id', 'reception_id', 'file', 'file_url', 'description', 'uploaded_by', 'created_at']
+        fields = ['id', 'reception_id', 'file', 'file_url', 'attachment_type', 'description', 'uploaded_by', 'created_at']
         read_only_fields = ['id', 'uploaded_by', 'created_at', 'file_url']
 
 
@@ -440,7 +440,6 @@ class EntradaProductoSerializer(serializers.ModelSerializer):
     marca_name = serializers.CharField(source='marca.name', read_only=True)
     modelo_name = serializers.CharField(source='modelo.name', read_only=True)
     categoria_name = serializers.CharField(source='categoria.name', read_only=True)
-    ubicacion_name = serializers.CharField(source='ubicacion.name', read_only=True)
     registrado_por_name = serializers.CharField(source='registrado_por.name', read_only=True)
     adjuntos = serializers.SerializerMethodField()
 
@@ -451,7 +450,8 @@ class EntradaProductoSerializer(serializers.ModelSerializer):
             'marca', 'marca_name', 'modelo', 'modelo_name',
             'categoria', 'categoria_name',
             'tipo', 'cantidad', 'seriales',
-            'ubicacion', 'ubicacion_name', 'observaciones',
+            'observaciones',
+            'entregado_por_nombre', 'entregado_por_apellido', 'entregado_por_cedula', 'entregado_por_rango_cargo',
             'fecha_recepcion', 'fecha_entrada',
             'registrado_por', 'registrado_por_name',
             'adjuntos',
@@ -480,8 +480,11 @@ class EntradaProductoLineInputSerializer(serializers.Serializer):
 
 class EntradaProductoBatchCreateSerializer(serializers.Serializer):
     fecha_recepcion = serializers.DateTimeField(required=False)
-    ubicacion = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('ubicacion').remote_field.model.objects.all())
     observaciones = serializers.CharField(required=False, allow_blank=True)
+    entregado_por_nombre = serializers.CharField(max_length=120)
+    entregado_por_apellido = serializers.CharField(max_length=120)
+    entregado_por_cedula = serializers.CharField(max_length=30)
+    entregado_por_rango_cargo = serializers.CharField(max_length=120)
     lineas = EntradaProductoLineInputSerializer(many=True)
 
     def validate_lineas(self, value):

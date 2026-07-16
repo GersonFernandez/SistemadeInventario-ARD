@@ -89,10 +89,18 @@ export const inventoryApi = {
   deleteInstallation: (id) => api.delete(`/inventory/installations/${id}/`),
 
   getProductEntries: (params = {}) => api.get('/inventory/product-entries/', { params }),
-  createProductEntryBatch: (payload, attachments = []) => {
+  createProductEntryBatch: (payload, attachments = {}) => {
     const formData = new FormData()
     formData.append('payload', JSON.stringify(payload))
-    attachments.forEach((file) => formData.append('attachments', file))
+
+    if (Array.isArray(attachments)) {
+      attachments.forEach((file) => formData.append('attachments', file))
+    } else {
+      ;(attachments.photos || []).forEach((file) => formData.append('photos', file))
+      ;(attachments.documents || []).forEach((file) => formData.append('documents', file))
+      ;(attachments.signedReceipt || []).forEach((file) => formData.append('signed_receipt', file))
+    }
+
     return api.post('/inventory/product-entries/create_batch/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -101,6 +109,15 @@ export const inventoryApi = {
     params: { reception_id: receptionId, type: format },
     responseType: 'blob',
   }),
+  uploadSignedReceipt: (receptionId, files = []) => {
+    const formData = new FormData()
+    formData.append('reception_id', receptionId)
+    ;(files || []).forEach((file) => formData.append('signed_receipt', file))
+
+    return api.post('/inventory/product-entries/upload_signed_receipt/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 export const getMediaUrl = (path) => {

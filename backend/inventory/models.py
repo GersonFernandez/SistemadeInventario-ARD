@@ -594,8 +594,18 @@ class EntradaProducto(DirtyFieldsMixin, models.Model):
     tipo = models.CharField(max_length=20, choices=Tipo.choices)
     cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     seriales = models.JSONField(default=list, blank=True)
-    ubicacion = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='entradas_producto')
+    ubicacion = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name='entradas_producto',
+        null=True,
+        blank=True,
+    )
     observaciones = models.TextField(blank=True)
+    entregado_por_nombre = models.CharField(max_length=120)
+    entregado_por_apellido = models.CharField(max_length=120)
+    entregado_por_cedula = models.CharField(max_length=30)
+    entregado_por_rango_cargo = models.CharField(max_length=120)
     fecha_recepcion = models.DateTimeField(default=timezone.now)
     fecha_entrada = models.DateTimeField(auto_now_add=True)
     registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='entradas_producto')
@@ -615,8 +625,14 @@ class EntradaProducto(DirtyFieldsMixin, models.Model):
 
 
 class EntradaProductoAttachment(models.Model):
+    class AttachmentType(models.TextChoices):
+        FOTO = 'foto', 'Foto evidencia'
+        DOCUMENTO = 'documento', 'Documento'
+        COMPROBANTE_FIRMADO = 'comprobante_firmado', 'Comprobante firmado'
+
     reception_id = models.CharField(max_length=40, db_index=True)
     file = models.FileField(upload_to='recepciones/%Y/%m/')
+    attachment_type = models.CharField(max_length=30, choices=AttachmentType.choices, default=AttachmentType.DOCUMENTO)
     description = models.CharField(max_length=120, blank=True)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='entrada_producto_adjuntos')
     created_at = models.DateTimeField(auto_now_add=True)

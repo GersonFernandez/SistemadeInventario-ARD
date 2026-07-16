@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
-import { inventoryApi } from '../services/inventoryApi'
+import { getMediaUrl, inventoryApi } from '../services/inventoryApi'
 
 const emptyLine = {
   tipo: 'nuevo',
@@ -15,19 +15,26 @@ const emptyLine = {
 
 export default function ReceptionPage() {
   const [fechaRecepcion, setFechaRecepcion] = useState(new Date().toISOString().slice(0, 16))
-  const [ubicacion, setUbicacion] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [lineas, setLineas] = useState([{ ...emptyLine }])
-  const [attachments, setAttachments] = useState([])
+  const [entregadoPorNombre, setEntregadoPorNombre] = useState('')
+  const [entregadoPorApellido, setEntregadoPorApellido] = useState('')
+  const [entregadoPorCedula, setEntregadoPorCedula] = useState('')
+  const [entregadoPorRangoCargo, setEntregadoPorRangoCargo] = useState('')
+  const [photos, setPhotos] = useState([])
+  const [documents, setDocuments] = useState([])
+  const [signedReceipt, setSignedReceipt] = useState([])
 
   const [brands, setBrands] = useState([])
   const [models, setModels] = useState([])
   const [categories, setCategories] = useState([])
-  const [locations, setLocations] = useState([])
 
   const [history, setHistory] = useState([])
   const [filters, setFilters] = useState({ tipo: '', marca: '', modelo: '', from: '', to: '' })
   const [saving, setSaving] = useState(false)
+  const [lastSavedReceptionId, setLastSavedReceptionId] = useState('')
+  const [signedReceiptByReception, setSignedReceiptByReception] = useState({})
+  const [uploadingByReception, setUploadingByReception] = useState({})
 
   useEffect(() => {
     loadCatalogs()
@@ -48,18 +55,25 @@ export default function ReceptionPage() {
     })).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
   }, [history])
 
+  const attachmentLabel = (type) => {
+    if (type === 'foto') return 'Foto'
+    if (type === 'documento') return 'Documento'
+    if (type === 'comprobante_firmado') return 'Comprobante firmado'
+    return type || 'Adjunto'
+  }
+
+  const isImageAttachment = (fileUrl = '') => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileUrl)
+
   const loadCatalogs = async () => {
     try {
-      const [b, m, c, l] = await Promise.all([
+      const [b, m, c] = await Promise.all([
         inventoryApi.getBrands({ is_active: true }),
         inventoryApi.getProductModels({ is_active: true }),
         inventoryApi.getCategories(),
-        inventoryApi.getLocations(),
       ])
       setBrands(b.data.results || b.data)
       setModels(m.data.results || m.data)
       setCategories(c.data.results || c.data)
-      setLocations(l.data.results || l.data)
     } catch {
       toast.error('No se pudieron cargar catálogos de recepción')
     }
@@ -99,8 +113,8 @@ export default function ReceptionPage() {
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!ubicacion) {
-      toast.error('Debe seleccionar ubicación destino')
+    if (!entregadoPorNombre || !entregadoPorApellido || !entregadoPorCedula || !entregadoPorRangoCargo) {
+      toast.error('Complete los datos de quien entrega')
       return
     }
     for (const [index, line] of lineas.entries()) {
@@ -112,8 +126,11 @@ export default function ReceptionPage() {
 
     const payload = {
       fecha_recepcion: new Date(fechaRecepcion).toISOString(),
-      ubicacion: Number(ubicacion),
       observaciones,
+      entregado_por_nombre: entregadoPorNombre,
+      entregado_por_apellido: entregadoPorApellido,
+      entregado_por_cedula: entregadoPorCedula,
+      entregado_por_rango_cargo: entregadoPorRangoCargo,
       lineas: lineas.map((line) => ({
         tipo: line.tipo,
         marca: Number(line.marca),
@@ -127,13 +144,24 @@ export default function ReceptionPage() {
 
     setSaving(true)
     try {
-      const { data } = await inventoryApi.createProductEntryBatch(payload, attachments)
+      const { data } = await inventoryApi.createProductEntryBatch(payload, {
+        photos,
+        documents,
+        signedReceipt,
+      })
       toast.success(`Recepción registrada: ${data.reception_id}`)
+      setLastSavedReceptionId(data.reception_id)
+      await downloadReceipt(data.reception_id)
       setFechaRecepcion(new Date().toISOString().slice(0, 16))
-      setUbicacion('')
       setObservaciones('')
+      setEntregadoPorNombre('')
+      setEntregadoPorApellido('')
+      setEntregadoPorCedula('')
+      setEntregadoPorRangoCargo('')
       setLineas([{ ...emptyLine }])
-      setAttachments([])
+      setPhotos([])
+      setDocuments([])
+      setSignedReceipt([])
       await loadHistory()
     } catch (error) {
       const detail = error.response?.data?.detail || 'No se pudo guardar la recepción'
@@ -158,6 +186,34 @@ export default function ReceptionPage() {
     }
   }
 
+  const onSignedReceiptSelected = (receptionId, files) => {
+    setSignedReceiptByReception((prev) => ({
+      ...prev,
+      [receptionId]: Array.from(files || []),
+    }))
+  }
+
+  const uploadSignedReceiptOnly = async (receptionId) => {
+    const files = signedReceiptByReception[receptionId] || []
+    if (!files.length) {
+      toast.error('Seleccione al menos un comprobante firmado')
+      return
+    }
+
+    setUploadingByReception((prev) => ({ ...prev, [receptionId]: true }))
+    try {
+      await inventoryApi.uploadSignedReceipt(receptionId, files)
+      toast.success('Comprobante firmado cargado')
+      setSignedReceiptByReception((prev) => ({ ...prev, [receptionId]: [] }))
+      await loadHistory()
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'No se pudo subir el comprobante firmado'
+      toast.error(detail)
+    } finally {
+      setUploadingByReception((prev) => ({ ...prev, [receptionId]: false }))
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -166,21 +222,44 @@ export default function ReceptionPage() {
       </div>
 
       <form onSubmit={submit} className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-semibold text-gray-600">Fecha de recepción</label>
             <input type="datetime-local" value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} className="mt-1 w-full rounded border px-3 py-2 text-sm" required />
           </div>
           <div>
-            <label className="text-xs font-semibold text-gray-600">Ubicación destino</label>
-            <select value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} className="mt-1 w-full rounded border px-3 py-2 text-sm" required>
-              <option value="">Seleccione</option>
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.breadcrumb || l.name}</option>)}
-            </select>
+            <label className="text-xs font-semibold text-gray-600">Foto (evidencia visual)</label>
+            <input type="file" multiple accept="image/*" onChange={(e) => setPhotos(Array.from(e.target.files || []))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Nombre (quien entrega)</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 text-sm" value={entregadoPorNombre} onChange={(e) => setEntregadoPorNombre(e.target.value)} required />
           </div>
           <div>
-            <label className="text-xs font-semibold text-gray-600">Adjuntos</label>
-            <input type="file" multiple onChange={(e) => setAttachments(Array.from(e.target.files || []))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+            <label className="text-xs font-semibold text-gray-600">Apellido</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 text-sm" value={entregadoPorApellido} onChange={(e) => setEntregadoPorApellido(e.target.value)} required />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Cédula</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 text-sm" value={entregadoPorCedula} onChange={(e) => setEntregadoPorCedula(e.target.value)} required />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Rango/Cargo</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 text-sm" value={entregadoPorRangoCargo} onChange={(e) => setEntregadoPorRangoCargo(e.target.value)} required />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Documento (factura, guía de despacho, etc.)</label>
+            <input type="file" multiple onChange={(e) => setDocuments(Array.from(e.target.files || []))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Comprobante firmado (opcional, escaneado)</label>
+            <input type="file" multiple accept="application/pdf,image/*" onChange={(e) => setSignedReceipt(Array.from(e.target.files || []))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
           </div>
         </div>
 
@@ -264,6 +343,42 @@ export default function ReceptionPage() {
         </div>
       </form>
 
+      {lastSavedReceptionId ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-emerald-800">Recepción guardada: {lastSavedReceptionId}</h3>
+          <p className="text-xs text-emerald-700">
+            Descargue el Comprobante PDF de recepción, fírmelo y luego súbalo como comprobante firmado.
+          </p>
+          <div className="flex flex-col md:flex-row md:items-end gap-3">
+            <button
+              type="button"
+              onClick={() => downloadReceipt(lastSavedReceptionId)}
+              className="rounded bg-emerald-700 px-3 py-2 text-sm text-white hover:bg-emerald-800"
+            >
+              Descargar Comprobante PDF
+            </button>
+            <div className="flex-1">
+              <label className="text-xs font-semibold text-emerald-800">Subir comprobante firmado (solo este tipo)</label>
+              <input
+                type="file"
+                multiple
+                accept="application/pdf,image/*"
+                onChange={(e) => onSignedReceiptSelected(lastSavedReceptionId, e.target.files)}
+                className="mt-1 w-full rounded border border-emerald-200 px-3 py-2 text-sm bg-white"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => uploadSignedReceiptOnly(lastSavedReceptionId)}
+              disabled={!!uploadingByReception[lastSavedReceptionId]}
+              className="rounded border border-emerald-600 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+            >
+              {uploadingByReception[lastSavedReceptionId] ? 'Subiendo...' : 'Subir firmado'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
         <h3 className="text-lg font-semibold text-gray-900">Historial de entradas</h3>
 
@@ -296,6 +411,7 @@ export default function ReceptionPage() {
               <tr>
                 <th className="px-3 py-2 text-left">Recepción</th>
                 <th className="px-3 py-2 text-left">Fecha</th>
+                <th className="px-3 py-2 text-left">Entrega</th>
                 <th className="px-3 py-2 text-left">Líneas</th>
                 <th className="px-3 py-2 text-left">Acción</th>
               </tr>
@@ -305,14 +421,58 @@ export default function ReceptionPage() {
                 <tr key={group.receptionId}>
                   <td className="px-3 py-2 font-medium text-gray-900">{group.receptionId}</td>
                   <td className="px-3 py-2 text-gray-700">{new Date(group.fecha).toLocaleString('es-DO')}</td>
+                  <td className="px-3 py-2 text-gray-700">{`${group.rows[0]?.entregado_por_nombre || ''} ${group.rows[0]?.entregado_por_apellido || ''}`.trim() || '—'}</td>
                   <td className="px-3 py-2 text-gray-700">{group.rows.map((r) => `${r.marca_name} ${r.modelo_name} (${r.cantidad})`).join(', ')}</td>
                   <td className="px-3 py-2">
-                    <button onClick={() => downloadReceipt(group.receptionId)} className="text-brand-700 hover:text-brand-900">Comprobante PDF</button>
+                    <div className="space-y-2">
+                      <button onClick={() => downloadReceipt(group.receptionId)} className="text-brand-700 hover:text-brand-900">Comprobante PDF</button>
+                      <div className="rounded border border-gray-200 p-2 bg-white space-y-2">
+                        <p className="text-xs font-semibold text-gray-700">Subir comprobante firmado (solo)</p>
+                        <input
+                          type="file"
+                          multiple
+                          accept="application/pdf,image/*"
+                          onChange={(e) => onSignedReceiptSelected(group.receptionId, e.target.files)}
+                          className="w-full rounded border px-2 py-1 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => uploadSignedReceiptOnly(group.receptionId)}
+                          disabled={!!uploadingByReception[group.receptionId]}
+                          className="text-xs rounded border border-brand-700 px-2 py-1 text-brand-700 hover:bg-brand-50 disabled:opacity-60"
+                        >
+                          {uploadingByReception[group.receptionId] ? 'Subiendo...' : 'Subir firmado'}
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(group.rows[0]?.adjuntos || []).length > 0 ? group.rows[0].adjuntos.map((attachment) => {
+                          const attachmentUrl = getMediaUrl(attachment.file_url)
+                          return (
+                            <div key={attachment.id} className="rounded border border-gray-200 p-2 bg-gray-50">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-700">{attachmentLabel(attachment.attachment_type)}</p>
+                                  {attachment.description && <p className="text-[11px] text-gray-500">{attachment.description}</p>}
+                                </div>
+                                <a href={attachmentUrl} target="_blank" rel="noreferrer" className="text-xs text-brand-700 hover:text-brand-900">Abrir</a>
+                              </div>
+                              {isImageAttachment(attachment.file_url) && (
+                                <img
+                                  src={attachmentUrl}
+                                  alt={attachmentLabel(attachment.attachment_type)}
+                                  className="mt-2 h-24 w-full rounded object-cover border border-gray-200"
+                                />
+                              )}
+                            </div>
+                          )
+                        }) : <p className="text-xs text-gray-400">Sin adjuntos</p>}
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ))}
               {groupedHistory.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-4 text-center text-gray-500">Sin registros</td></tr>
+                <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-500">Sin registros</td></tr>
               )}
             </tbody>
           </table>
