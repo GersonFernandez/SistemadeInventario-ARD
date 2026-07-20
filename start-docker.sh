@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 set -e
 
-docker compose up -d --build --wait
+docker compose up -d --build --pull always --wait

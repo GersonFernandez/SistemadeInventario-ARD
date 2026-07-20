@@ -4,41 +4,30 @@ import {
   HomeIcon,
   CubeIcon,
   ClipboardDocumentListIcon,
-  UsersIcon,
-  ArrowRightOnRectangleIcon,
-  ShieldCheckIcon,
-  TagIcon,
-  MapPinIcon,
-  ArrowsRightLeftIcon,
-  KeyIcon,
-  UserCircleIcon,
   WrenchScrewdriverIcon,
-  CircleStackIcon,
   ArrowUpTrayIcon,
-  ArchiveBoxArrowDownIcon,
-  RectangleGroupIcon,
-  SquaresPlusIcon,
+  CircleStackIcon,
+  MapPinIcon,
+  TagIcon,
+  UsersIcon,
+  InboxArrowDownIcon,
+  ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
 import { useAuth } from '../context/AuthContext'
 import SessionTimeout from './SessionTimeout'
-import GlobalSearch from './GlobalSearch'
 
 const navigation = [
   { name: 'Inicio', href: '/', icon: HomeIcon },
-  { name: 'Inventario', href: '/inventory', icon: CubeIcon },
-  { name: 'Recepción', href: '/reception', icon: ArchiveBoxArrowDownIcon, staffOnly: true },
+  { name: 'Productos', href: '/products', icon: CubeIcon },
+  { name: 'Órdenes de servicio', href: '/service-orders', icon: ClipboardDocumentListIcon },
+  { name: 'Reparaciones', href: '/repairs', icon: WrenchScrewdriverIcon },
+  { name: 'Instalaciones', href: '/installations', icon: ArrowUpTrayIcon },
+  { name: 'Recepción de mercancías', href: '/reception', icon: InboxArrowDownIcon },
+  { name: 'Despacho de mercancías', href: '/despachos', icon: ClipboardDocumentListIcon },
+  { name: 'Solicitantes', href: '/solicitantes', icon: UsersIcon },
+  { name: 'Catálogos', href: '/product-catalogs', icon: CircleStackIcon },
   { name: 'Ubicaciones', href: '/locations', icon: MapPinIcon },
   { name: 'Categorías', href: '/categories', icon: TagIcon },
-  { name: 'Mantenimiento Marcas', href: '/brands-maintenance', icon: RectangleGroupIcon, staffOnly: true },
-  { name: 'Mantenimiento Modelos', href: '/models-maintenance', icon: SquaresPlusIcon, staffOnly: true },
-  { name: 'Catálogos', href: '/product-catalogs', icon: CircleStackIcon, staffOnly: true },
-  { name: 'Reparaciones', href: '/repairs', icon: WrenchScrewdriverIcon, staffOnly: true },
-  { name: 'Instalaciones', href: '/installations', icon: ArrowUpTrayIcon, staffOnly: true },
-  { name: 'Despachos', href: '/despachos', icon: ClipboardDocumentListIcon },
-  { name: 'Solicitantes', href: '/solicitantes', icon: UserCircleIcon, staffOnly: true },
-  { name: 'Asignaciones', href: '/asignaciones', icon: ArrowsRightLeftIcon, staffOnly: true },
-  { name: 'Seguridad', href: '/security', icon: KeyIcon },
-  { name: 'Auditoría', href: '/audit', icon: ShieldCheckIcon, adminOnly: true },
   { name: 'Usuarios', href: '/users', icon: UsersIcon, adminOnly: true },
 ]
 
@@ -52,9 +41,6 @@ export default function Layout({ children }) {
   }
 
   const isAdmin = user?.role === 'admin'
-  const isAlmacenista = user?.role === 'almacenista'
-  const canSeeStaff = isAdmin || isAlmacenista
-
   return (
     <div className="min-h-screen flex">
       <SessionTimeout />
@@ -67,7 +53,6 @@ export default function Layout({ children }) {
         <nav className="flex-1 p-4 space-y-1">
           {navigation.map((item) => {
             if (item.adminOnly && !isAdmin) return null
-            if (item.staffOnly && !canSeeStaff) return null
             const Icon = item.icon
             return (
               <Link
@@ -101,7 +86,7 @@ export default function Layout({ children }) {
 
       <div className="flex-1 flex flex-col">
         <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
-          <GlobalSearch />
+          <div className="text-sm font-medium text-gray-700">Módulo de acceso y usuarios</div>
           <div className="text-sm text-gray-600">
             {new Date().toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>

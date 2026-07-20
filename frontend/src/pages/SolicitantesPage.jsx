@@ -1,206 +1,252 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { PlusIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
 import { solicitanteApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
-
-const emptyForm = {
-  name: '',
-  rank: '',
-  agent_id: '',
-  unit: '',
-  notes: '',
-  is_active: true,
-}
+import { useAuth } from '../context/AuthContext'
 
 export default function SolicitantesPage() {
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const canManage = user?.role === 'admin' || user?.role === 'almacenista'
+
   const [solicitantes, setSolicitantes] = useState([])
   const [locations, setLocations] = useState([])
-  const [editingId, setEditingId] = useState(null)
-  const [form, setForm] = useState(emptyForm)
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('true')
+  const [unitFilter, setUnitFilter] = useState('all')
+  const [rankFilter, setRankFilter] = useState('all')
 
   useEffect(() => {
-    fetchAll()
+    loadLocations()
   }, [])
 
-  const fetchAll = async () => {
+  useEffect(() => {
+    loadSolicitantes()
+  }, [statusFilter])
+
+  const locationMap = useMemo(() => {
+    const map = {}
+    locations.forEach((loc) => {
+      map[String(loc.id)] = loc.breadcrumb || loc.name
+    })
+    return map
+  }, [locations])
+
+  const rankOptions = useMemo(() => {
+    const set = new Set(
+      solicitantes
+        .map((sol) => (sol.rank || '').trim())
+        .filter(Boolean),
+    )
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  }, [solicitantes])
+
+  const filteredSolicitantes = useMemo(() => {
+    return solicitantes.filter((sol) => {
+      if (unitFilter !== 'all' && String(sol.unit || '') !== unitFilter) return false
+      if (rankFilter !== 'all' && (sol.rank || '').trim() !== rankFilter) return false
+      return true
+    })
+  }, [solicitantes, unitFilter, rankFilter])
+
+  const loadLocations = async () => {
+    try {
+      const { data } = await inventoryApi.getLocations({ page_size: 300 })
+      setLocations(data.results || data)
+    } catch {
+      toast.error('No se pudieron cargar las ubicaciones')
+    }
+  }
+
+  const loadSolicitantes = async (overrideSearch = search) => {
     setLoading(true)
     try {
-      const [solRes, locRes] = await Promise.all([
-        solicitanteApi.list({ is_active: 'true' }),
-        inventoryApi.getLocations(),
-      ])
-      setSolicitantes(solRes.data || [])
-      setLocations(locRes.data.results || locRes.data)
-    } catch (error) {
-      toast.error('No se pudo cargar la información de solicitantes')
+      const params = {}
+      if (overrideSearch?.trim()) params.search = overrideSearch.trim()
+      if (statusFilter !== 'all') params.is_active = statusFilter
+      const { data } = await solicitanteApi.list(params)
+      setSolicitantes(data.results || data)
+    } catch {
+      toast.error('No se pudieron cargar los solicitantes')
     } finally {
       setLoading(false)
     }
   }
 
-  const startEdit = async (id) => {
+  const handleDisable = async (sol) => {
+    if (!window.confirm(`¿Desea deshabilitar a ${sol.rank ? `${sol.rank} ` : ''}${sol.name}?`)) return
     try {
-      const { data } = await solicitanteApi.get(id)
-      setEditingId(id)
-      setForm({
-        name: data.name || '',
-        rank: data.rank || '',
-        agent_id: data.agent_id || '',
-        unit: data.unit || '',
-        notes: data.notes || '',
-        is_active: data.is_active,
-      })
-    } catch {
-      toast.error('No se pudo cargar el solicitante')
-    }
-  }
-
-  const resetForm = () => {
-    setEditingId(null)
-    setForm(emptyForm)
-  }
-
-  const submitForm = async (e) => {
-    e.preventDefault()
-    if (!form.name.trim()) {
-      toast.error('El nombre es obligatorio')
-      return
-    }
-    setSaving(true)
-    try {
-      const payload = { ...form }
-      if (!payload.unit) payload.unit = null
-      if (editingId) {
-        await solicitanteApi.update(editingId, payload)
-        toast.success('Solicitante actualizado')
-      } else {
-        await solicitanteApi.create(payload)
-        toast.success('Solicitante creado')
-      }
-      resetForm()
-      fetchAll()
-    } catch (error) {
-      const data = error.response?.data
-      const msg = data?.detail || Object.values(data || {}).flat().join(', ') || 'Error al guardar'
-      toast.error(msg)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const disableSolicitante = async (id) => {
-    if (!confirm('¿Desea deshabilitar este solicitante?')) return
-    try {
-      await solicitanteApi.disable(id)
+      await solicitanteApi.disable(sol.id)
       toast.success('Solicitante deshabilitado')
-      fetchAll()
-    } catch {
-      toast.error('No se pudo deshabilitar el solicitante')
+      await loadSolicitantes()
+    } catch (error) {
+      const message = error.response?.data?.detail || 'No se pudo deshabilitar el solicitante'
+      toast.error(message)
+    }
+  }
+
+  const handleReactivate = async (sol) => {
+    if (!window.confirm(`¿Desea reactivar a ${sol.rank ? `${sol.rank} ` : ''}${sol.name}?`)) return
+    try {
+      await solicitanteApi.partialUpdate(sol.id, { is_active: true })
+      toast.success('Solicitante reactivado')
+      await loadSolicitantes()
+    } catch (error) {
+      const message = error.response?.data?.detail || 'No se pudo reactivar el solicitante'
+      toast.error(message)
     }
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Solicitantes</h2>
-        <p className="mt-1 text-sm text-gray-600">Gestión de solicitantes para despachos y préstamos.</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Solicitantes</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Administración de personal o unidades que reciben mercancía en despachos.
+          </p>
+        </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => navigate('/solicitantes/new')}
+            className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Nuevo solicitante
+          </button>
+        )}
       </div>
 
-      <form onSubmit={submitForm} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-        <h3 className="text-sm font-semibold text-gray-800">{editingId ? 'Editar solicitante' : 'Nuevo solicitante'}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
           <input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="Nombre completo"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          <input
-            value={form.rank}
-            onChange={(e) => setForm({ ...form, rank: e.target.value })}
-            placeholder="Rango/Grado"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          <input
-            value={form.agent_id}
-            onChange={(e) => setForm({ ...form, agent_id: e.target.value })}
-            placeholder="Cédula o ID"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && loadSolicitantes(e.currentTarget.value)}
+            placeholder="Buscar por nombre, rango o cédula"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm md:col-span-2"
           />
           <select
-            value={form.unit}
-            onChange={(e) => setForm({ ...form, unit: e.target.value })}
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value)}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           >
-            <option value="">Sin ubicación</option>
+            <option value="all">Todas las unidades</option>
             {locations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>
+              <option key={loc.id} value={String(loc.id)}>{loc.breadcrumb || loc.name}</option>
             ))}
           </select>
-          <textarea
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            rows={2}
-            placeholder="Notas"
-            className="md:col-span-2 rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50"
+          <select
+            value={rankFilter}
+            onChange={(e) => setRankFilter(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           >
-            {saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Crear'}
+            <option value="all">Todos los rangos</option>
+            {rankOptions.map((rank) => (
+              <option key={rank} value={rank}>{rank}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
+            <option value="all">Todos</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => loadSolicitantes()}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Filtrar
           </button>
-          {editingId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
-            >
-              Cancelar edición
-            </button>
-          )}
         </div>
-      </form>
+      </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {loading ? (
-          <p className="p-5 text-sm text-gray-600">Cargando...</p>
-        ) : (
-          <table className="min-w-full divide-y divide-gray-200">
+      {loading ? (
+        <p className="text-sm text-gray-600">Cargando solicitantes...</p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Nombre</th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">ID</th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Ubicación</th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase text-gray-500">Acciones</th>
+                <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Solicitante</th>
+                <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Unidad</th>
+                <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Cédula / ID</th>
+                <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Estado</th>
+                <th className="px-4 py-3 text-right font-medium uppercase tracking-wide text-gray-500">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {solicitantes.map((s) => (
-                <tr key={s.id}>
-                  <td className="px-4 py-2 text-sm text-gray-900">{s.rank ? `${s.rank} ` : ''}{s.name}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">{s.agent_id || '—'}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">{s.unit_name || '—'}</td>
-                  <td className="px-4 py-2 text-right text-sm">
-                    <button onClick={() => startEdit(s.id)} className="text-brand-700 hover:text-brand-900">Editar</button>
-                    <button onClick={() => disableSolicitante(s.id)} className="ml-4 text-red-600 hover:text-red-900">Deshabilitar</button>
+              {filteredSolicitantes.map((sol) => (
+                <tr key={sol.id}>
+                  <td className="px-4 py-3 text-gray-900">
+                    <p className="font-medium">{sol.full_name || `${sol.rank ? `${sol.rank} ` : ''}${sol.name}`}</p>
+                    {sol.notes ? <p className="mt-0.5 text-xs text-gray-500">{sol.notes}</p> : null}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">{sol.unit_name || locationMap[String(sol.unit)] || 'Sin unidad'}</td>
+                  <td className="px-4 py-3 text-gray-700">{sol.agent_id || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${sol.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
+                      {sol.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {canManage ? (
+                      <div className="inline-flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/solicitantes/${sol.id}/edit`)}
+                          className="inline-flex items-center gap-1 text-brand-700 hover:text-brand-900"
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                          Editar
+                        </button>
+                        {sol.is_active && (
+                          <button
+                            type="button"
+                            onClick={() => handleDisable(sol)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Deshabilitar
+                          </button>
+                        )}
+                        {!sol.is_active && (
+                          <button
+                            type="button"
+                            onClick={() => handleReactivate(sol)}
+                            className="text-emerald-700 hover:text-emerald-900"
+                          >
+                            Reactivar
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500">Sin permisos</span>
+                    )}
                   </td>
                 </tr>
               ))}
-              {solicitantes.length === 0 && (
+
+              {filteredSolicitantes.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-500">No hay solicitantes activos.</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                    No se encontraron solicitantes para los filtros seleccionados.
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
+
     </div>
   )
 }

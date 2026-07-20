@@ -108,7 +108,7 @@ export default function ItemFormPage() {
       }
     } catch {
       toast.error('Error al cargar el artículo')
-      navigate('/inventory')
+      navigate('/products')
     } finally {
       setLoading(false)
     }
@@ -246,7 +246,7 @@ export default function ItemFormPage() {
         }
       }
 
-      navigate('/inventory')
+      navigate('/products')
     } catch (error) {
       const message =
         error.response?.data?.detail ||
@@ -580,7 +580,7 @@ export default function ItemFormPage() {
           </button>
           <button
             type="button"
-            onClick={() => navigate('/inventory')}
+            onClick={() => navigate('/products')}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Cancelar

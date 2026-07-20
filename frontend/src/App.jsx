@@ -3,28 +3,26 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
-import InventoryPage from './pages/InventoryPage'
-import ItemFormPage from './pages/ItemFormPage'
-import ItemDetailPage from './pages/ItemDetailPage'
-import DashboardPage from './pages/DashboardPage'
-import DespachosPage from './pages/DespachosPage'
-import DespachoFormPage from './pages/DespachoFormPage'
-import DespachoDetailPage from './pages/DespachoDetailPage'
-import AsignacionesActivasPage from './pages/AsignacionesActivasPage'
-import AuditPage from './pages/AuditPage'
-import UsersPage from './pages/UsersPage'
-import UserFormPage from './pages/UserFormPage'
+import AccessHubPage from './pages/AccessHubPage'
+import ProductsPage from './pages/ProductsPage'
 import CategoriesPage from './pages/CategoriesPage'
 import LocationsPage from './pages/LocationsPage'
-import PrintLabelPage from './pages/PrintLabelPage'
-import SecurityPage from './pages/SecurityPage'
-import SolicitantesPage from './pages/SolicitantesPage'
 import ProductCatalogsPage from './pages/ProductCatalogsPage'
 import RepairsPage from './pages/RepairsPage'
 import InstallationsPage from './pages/InstallationsPage'
 import ReceptionPage from './pages/ReceptionPage'
-import BrandsMaintenancePage from './pages/BrandsMaintenancePage'
-import ModelsMaintenancePage from './pages/ModelsMaintenancePage'
+import ItemDetailPage from './pages/ItemDetailPage'
+import ItemFormPage from './pages/ItemFormPage'
+import PrintLabelPage from './pages/PrintLabelPage'
+import DespachosPage from './pages/DespachosPage'
+import DespachoFormPage from './pages/DespachoFormPage'
+import DespachoDetailPage from './pages/DespachoDetailPage'
+import ServiceOrdersPage from './pages/ServiceOrdersPage'
+import ServiceOrderDetailPage from './pages/ServiceOrderDetailPage'
+import SolicitantesPage from './pages/SolicitantesPage'
+import SolicitanteFormPage from './pages/SolicitanteFormPage'
+import UsersPage from './pages/UsersPage'
+import UserFormPage from './pages/UserFormPage'
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth()
@@ -48,10 +46,6 @@ function ProtectedRoute({ children, adminOnly = false }) {
   return <Layout>{children}</Layout>
 }
 
-function Dashboard() {
-  return <DashboardPage />
-}
-
 export default function App() {
   return (
     <Routes>
@@ -60,28 +54,20 @@ export default function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <AccessHubPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/inventory"
+        path="/products"
         element={
           <ProtectedRoute>
-            <InventoryPage />
+            <ProductsPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/reception"
-        element={
-          <ProtectedRoute>
-            <ReceptionPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/inventory/new"
+        path="/products/new"
         element={
           <ProtectedRoute>
             <ItemFormPage />
@@ -89,7 +75,7 @@ export default function App() {
         }
       />
       <Route
-        path="/inventory/:id"
+        path="/products/:id"
         element={
           <ProtectedRoute>
             <ItemDetailPage />
@@ -97,10 +83,18 @@ export default function App() {
         }
       />
       <Route
-        path="/inventory/:id/edit"
+        path="/products/:id/edit"
         element={
           <ProtectedRoute>
             <ItemFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products/:id/print-label"
+        element={
+          <ProtectedRoute>
+            <PrintLabelPage />
           </ProtectedRoute>
         }
       />
@@ -121,42 +115,10 @@ export default function App() {
         }
       />
       <Route
-        path="/inventory/:id/print-label"
-        element={
-          <ProtectedRoute>
-            <PrintLabelPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/security"
-        element={
-          <ProtectedRoute>
-            <SecurityPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/product-catalogs"
         element={
           <ProtectedRoute>
             <ProductCatalogsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/brands-maintenance"
-        element={
-          <ProtectedRoute>
-            <BrandsMaintenancePage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/models-maintenance"
-        element={
-          <ProtectedRoute>
-            <ModelsMaintenancePage />
           </ProtectedRoute>
         }
       />
@@ -177,34 +139,10 @@ export default function App() {
         }
       />
       <Route
-        path="/workorders"
+        path="/reception"
         element={
           <ProtectedRoute>
-            <DespachosPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/workorders/new"
-        element={
-          <ProtectedRoute>
-            <DespachoFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/workorders/:id"
-        element={
-          <ProtectedRoute>
-            <DespachoDetailPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/workorders/:id/edit"
-        element={
-          <ProtectedRoute>
-            <DespachoFormPage />
+            <ReceptionPage />
           </ProtectedRoute>
         }
       />
@@ -213,14 +151,6 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DespachosPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/solicitantes"
-        element={
-          <ProtectedRoute>
-            <SolicitantesPage />
           </ProtectedRoute>
         }
       />
@@ -241,18 +171,58 @@ export default function App() {
         }
       />
       <Route
-        path="/asignaciones"
+        path="/workorders"
+        element={<Navigate to="/despachos" replace />}
+      />
+      <Route
+        path="/workorders/new"
+        element={<Navigate to="/despachos/new" replace />}
+      />
+      <Route
+        path="/workorders/:id"
         element={
           <ProtectedRoute>
-            <AsignacionesActivasPage />
+            <DespachoDetailPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/audit"
+        path="/service-orders"
         element={
           <ProtectedRoute>
-            <AuditPage />
+            <ServiceOrdersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/service-orders/:id"
+        element={
+          <ProtectedRoute>
+            <ServiceOrderDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/solicitantes"
+        element={
+          <ProtectedRoute>
+            <SolicitantesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/solicitantes/new"
+        element={
+          <ProtectedRoute>
+            <SolicitanteFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/solicitantes/:id/edit"
+        element={
+          <ProtectedRoute>
+            <SolicitanteFormPage />
           </ProtectedRoute>
         }
       />
@@ -280,6 +250,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

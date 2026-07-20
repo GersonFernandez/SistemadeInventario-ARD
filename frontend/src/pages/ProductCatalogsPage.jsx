@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { inventoryApi } from '../services/inventoryApi'
+import { productApi } from '../services/productApi'
 
 export default function ProductCatalogsPage() {
   const [brands, setBrands] = useState([])
@@ -17,9 +17,9 @@ export default function ProductCatalogsPage() {
   const loadAll = async () => {
     try {
       const [b, m, s] = await Promise.all([
-        inventoryApi.getBrands(),
-        inventoryApi.getProductModels(),
-        inventoryApi.getProductStates(),
+        productApi.getBrands(),
+        productApi.getProductModels(),
+        productApi.getProductStates(),
       ])
       setBrands(b.data.results || b.data)
       setModels(m.data.results || m.data)
@@ -32,7 +32,7 @@ export default function ProductCatalogsPage() {
   const createBrand = async (e) => {
     e.preventDefault()
     try {
-      await inventoryApi.createBrand(brandForm)
+      await productApi.createBrand(brandForm)
       setBrandForm({ name: '', description: '' })
       toast.success('Marca creada')
       loadAll()
@@ -44,7 +44,7 @@ export default function ProductCatalogsPage() {
   const createModel = async (e) => {
     e.preventDefault()
     try {
-      await inventoryApi.createProductModel(modelForm)
+      await productApi.createProductModel(modelForm)
       setModelForm({ brand: '', name: '', description: '' })
       toast.success('Modelo creado')
       loadAll()
@@ -56,7 +56,7 @@ export default function ProductCatalogsPage() {
   const createState = async (e) => {
     e.preventDefault()
     try {
-      await inventoryApi.createProductState(stateForm)
+      await productApi.createProductState(stateForm)
       setStateForm({ code: '', name: '', description: '' })
       toast.success('Estado creado')
       loadAll()
@@ -67,9 +67,9 @@ export default function ProductCatalogsPage() {
 
   const disableEntity = async (type, id) => {
     try {
-      if (type === 'brand') await inventoryApi.deleteBrand(id)
-      if (type === 'model') await inventoryApi.deleteProductModel(id)
-      if (type === 'state') await inventoryApi.deleteProductState(id)
+      if (type === 'brand') await productApi.deleteBrand(id)
+      if (type === 'model') await productApi.deleteProductModel(id)
+      if (type === 'state') await productApi.deleteProductState(id)
       toast.success('Registro deshabilitado')
       loadAll()
     } catch {

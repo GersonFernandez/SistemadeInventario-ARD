@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { getMediaUrl, inventoryApi } from '../services/inventoryApi'
+import ProductPickerField from '../components/ProductPickerField'
 
 const emptyLine = {
   tipo: 'nuevo',
+  item: '',
+  item_search: '',
   marca: '',
   modelo: '',
   categoria: '',
@@ -28,18 +31,27 @@ export default function ReceptionPage() {
   const [brands, setBrands] = useState([])
   const [models, setModels] = useState([])
   const [categories, setCategories] = useState([])
+  const [locations, setLocations] = useState([])
+  const [selectedLocation, setSelectedLocation] = useState('')
 
   const [history, setHistory] = useState([])
-  const [filters, setFilters] = useState({ tipo: '', marca: '', modelo: '', from: '', to: '' })
+  const [filters, setFilters] = useState({ tipo: '', marca: '', modelo: '', location: '', from: '', to: '' })
   const [saving, setSaving] = useState(false)
   const [lastSavedReceptionId, setLastSavedReceptionId] = useState('')
   const [signedReceiptByReception, setSignedReceiptByReception] = useState({})
   const [uploadingByReception, setUploadingByReception] = useState({})
+  const [products, setProducts] = useState([])
 
   useEffect(() => {
     loadCatalogs()
     loadHistory()
   }, [])
+
+  useEffect(() => {
+    if (!selectedLocation && locations.length) {
+      setSelectedLocation(String(locations[0].id))
+    }
+  }, [locations, selectedLocation])
 
   const groupedHistory = useMemo(() => {
     const groups = {}
@@ -55,6 +67,37 @@ export default function ReceptionPage() {
     })).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
   }, [history])
 
+  const inventorySummary = useMemo(() => {
+    const summary = {}
+
+    history.forEach((entry) => {
+      const key = [
+        entry.base_product_name || `${entry.marca_name} ${entry.modelo_name}`,
+        entry.ubicacion_breadcrumb || entry.ubicacion_name || 'Sin ubicación',
+        entry.tipo,
+      ].join(' | ')
+
+      if (!summary[key]) {
+        summary[key] = {
+          product: entry.base_product_name || `${entry.marca_name} ${entry.modelo_name}`,
+          location: entry.ubicacion_breadcrumb || entry.ubicacion_name || 'Sin ubicación',
+          tipo: entry.tipo,
+          cantidad: 0,
+          seriales: [],
+          ultimaRecepcion: entry.fecha_recepcion,
+        }
+      }
+
+      summary[key].cantidad += Number(entry.cantidad || 0)
+      summary[key].seriales = [...new Set([...summary[key].seriales, ...(entry.seriales || [])])]
+      if (new Date(entry.fecha_recepcion) > new Date(summary[key].ultimaRecepcion)) {
+        summary[key].ultimaRecepcion = entry.fecha_recepcion
+      }
+    })
+
+    return Object.values(summary).sort((a, b) => new Date(b.ultimaRecepcion) - new Date(a.ultimaRecepcion))
+  }, [history])
+
   const attachmentLabel = (type) => {
     if (type === 'foto') return 'Foto'
     if (type === 'documento') return 'Documento'
@@ -64,18 +107,41 @@ export default function ReceptionPage() {
 
   const isImageAttachment = (fileUrl = '') => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileUrl)
 
+  const getCatalogErrorMessage = (error) => error.response?.data?.detail
+    || error.response?.data?.message
+    || error.response?.data?.error
+    || error.message
+    || 'Error desconocido'
+
   const loadCatalogs = async () => {
-    try {
-      const [b, m, c] = await Promise.all([
-        inventoryApi.getBrands({ is_active: true }),
-        inventoryApi.getProductModels({ is_active: true }),
-        inventoryApi.getCategories(),
-      ])
-      setBrands(b.data.results || b.data)
-      setModels(m.data.results || m.data)
-      setCategories(c.data.results || c.data)
-    } catch {
-      toast.error('No se pudieron cargar catálogos de recepción')
+    const requests = [
+      ['productos', inventoryApi.getItems({ is_active: true, is_base_product: true, for_reception: true, page_size: 300 }), setProducts],
+      ['marcas', inventoryApi.getBrands({ is_active: true }), setBrands],
+      ['modelos', inventoryApi.getProductModels({ is_active: true }), setModels],
+      ['categorías', inventoryApi.getCategories(), setCategories],
+      ['ubicaciones', inventoryApi.getLocations({ page_size: 200 }), setLocations],
+    ]
+
+    const results = await Promise.allSettled(requests.map(([, request]) => request))
+    const failures = []
+
+    results.forEach((result, index) => {
+      const [label, , setData] = requests[index]
+
+      if (result.status === 'fulfilled') {
+        const data = result.value.data.results || result.value.data
+        setData(data)
+        return
+      }
+
+      failures.push(`${label}: ${getCatalogErrorMessage(result.reason)}`)
+      setData([])
+    })
+
+    if (failures.length === 1) {
+      toast.error(`No se pudo cargar ${failures[0]}`)
+    } else if (failures.length > 1) {
+      toast.error(`Algunos catálogos no cargaron: ${failures.join(' · ')}`)
     }
   }
 
@@ -85,6 +151,7 @@ export default function ReceptionPage() {
       if (filters.tipo) params.tipo = filters.tipo
       if (filters.marca) params.marca = filters.marca
       if (filters.modelo) params.modelo = filters.modelo
+      if (filters.location) params.ubicacion = filters.location
       if (filters.from) params.fecha_recepcion_after = filters.from
       if (filters.to) params.fecha_recepcion_before = filters.to
       const { data } = await inventoryApi.getProductEntries(params)
@@ -111,14 +178,34 @@ export default function ReceptionPage() {
     .map((s) => s.trim())
     .filter(Boolean)
 
+  const hydrateLineFromSelectedProduct = (line) => {
+    const selectedProduct = products.find((item) => String(item.id) === String(line.item))
+    if (!selectedProduct) return line
+
+    return {
+      ...line,
+      marca: line.marca || selectedProduct.brand || '',
+      modelo: line.modelo || selectedProduct.product_model || '',
+      categoria: line.categoria || selectedProduct.category || '',
+    }
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     if (!entregadoPorNombre || !entregadoPorApellido || !entregadoPorCedula || !entregadoPorRangoCargo) {
       toast.error('Complete los datos de quien entrega')
       return
     }
-    for (const [index, line] of lineas.entries()) {
-      if (!line.marca || !line.modelo || !line.categoria || !line.cantidad) {
+    if (!selectedLocation) {
+      toast.error('No hay ubicaciones cargadas para almacenar la mercancía')
+      return
+    }
+
+    const hydratedLines = lineas.map(hydrateLineFromSelectedProduct)
+    setLineas(hydratedLines)
+
+    for (const [index, line] of hydratedLines.entries()) {
+      if (!line.item || !line.cantidad) {
         toast.error(`Complete los campos obligatorios en la línea ${index + 1}`)
         return
       }
@@ -127,15 +214,17 @@ export default function ReceptionPage() {
     const payload = {
       fecha_recepcion: new Date(fechaRecepcion).toISOString(),
       observaciones,
+      ubicacion: Number(selectedLocation),
       entregado_por_nombre: entregadoPorNombre,
       entregado_por_apellido: entregadoPorApellido,
       entregado_por_cedula: entregadoPorCedula,
       entregado_por_rango_cargo: entregadoPorRangoCargo,
-      lineas: lineas.map((line) => ({
+      lineas: hydratedLines.map((line) => ({
+        item: Number(line.item),
         tipo: line.tipo,
-        marca: Number(line.marca),
-        modelo: Number(line.modelo),
-        categoria: Number(line.categoria),
+        marca: line.marca ? Number(line.marca) : null,
+        modelo: line.modelo ? Number(line.modelo) : null,
+        categoria: line.categoria ? Number(line.categoria) : null,
         cantidad: Number(line.cantidad),
         seriales: parseSeriales(line.seriales_text),
         observaciones: line.observaciones,
@@ -228,6 +317,21 @@ export default function ReceptionPage() {
             <input type="datetime-local" value={fechaRecepcion} onChange={(e) => setFechaRecepcion(e.target.value)} className="mt-1 w-full rounded border px-3 py-2 text-sm" required />
           </div>
           <div>
+            <label className="text-xs font-semibold text-gray-600">Ubicación de almacenamiento</label>
+            <select
+              value={selectedLocation}
+              onChange={(e) => setSelectedLocation(e.target.value)}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              required
+            >
+              <option value="">Seleccione una ubicación</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">La mercancía se almacenará y se filtrará por esta ubicación.</p>
+          </div>
+          <div>
             <label className="text-xs font-semibold text-gray-600">Foto (evidencia visual)</label>
             <input type="file" multiple accept="image/*" onChange={(e) => setPhotos(Array.from(e.target.files || []))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
           </div>
@@ -272,10 +376,8 @@ export default function ReceptionPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-2 py-2 text-left">Producto</th>
                 <th className="px-2 py-2 text-left">Tipo</th>
-                <th className="px-2 py-2 text-left">Marca</th>
-                <th className="px-2 py-2 text-left">Modelo</th>
-                <th className="px-2 py-2 text-left">Categoría</th>
                 <th className="px-2 py-2 text-left">Cantidad</th>
                 <th className="px-2 py-2 text-left">Seriales</th>
                 <th className="px-2 py-2 text-left">Obs.</th>
@@ -286,27 +388,24 @@ export default function ReceptionPage() {
               {lineas.map((line, index) => (
                 <tr key={index}>
                   <td className="px-2 py-2">
+                    <ProductPickerField
+                      items={products}
+                      line={line}
+                      onPatch={(patch) => updateLine(index, patch)}
+                      onSelectExtraPatch={(product) => ({
+                        marca: product.brand || '',
+                        modelo: product.product_model || '',
+                        categoria: product.category || '',
+                      })}
+                      onClearExtraPatch={() => ({ marca: '', modelo: '', categoria: '' })}
+                      modalTitle="Buscar producto"
+                      modalSubtitle="Seleccione un producto base para agregarlo a la recepción."
+                    />
+                  </td>
+                  <td className="px-2 py-2">
                     <select value={line.tipo} onChange={(e) => updateLine(index, { tipo: e.target.value })} className="w-full rounded border px-2 py-1">
                       <option value="nuevo">Nuevo</option>
                       <option value="usado">Usado/Reparación</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-2">
-                    <select value={line.marca} onChange={(e) => updateLine(index, { marca: e.target.value, modelo: '' })} className="w-full rounded border px-2 py-1" required>
-                      <option value="">Marca</option>
-                      {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-2 py-2">
-                    <select value={line.modelo} onChange={(e) => updateLine(index, { modelo: e.target.value })} className="w-full rounded border px-2 py-1" required>
-                      <option value="">Modelo</option>
-                      {getModelsByBrand(line.marca).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  </td>
-                  <td className="px-2 py-2">
-                    <select value={line.categoria} onChange={(e) => updateLine(index, { categoria: e.target.value })} className="w-full rounded border px-2 py-1" required>
-                      <option value="">Categoría</option>
-                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </td>
                   <td className="px-2 py-2">
@@ -335,7 +434,7 @@ export default function ReceptionPage() {
         <div className="flex items-center gap-3">
           <button type="button" onClick={addLine} className="inline-flex items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
             <PlusIcon className="h-4 w-4" />
-            Agregar línea
+            Agregar producto
           </button>
           <button type="submit" disabled={saving} className="rounded bg-brand-800 px-4 py-2 text-sm text-white hover:bg-brand-900 disabled:opacity-60">
             {saving ? 'Guardando...' : 'Guardar recepción'}
@@ -390,6 +489,12 @@ export default function ReceptionPage() {
             <option value="nuevo">Nuevo</option>
             <option value="usado">Usado/Reparación</option>
           </select>
+          <select value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })} className="rounded border px-3 py-2 text-sm">
+            <option value="">Ubicación</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>
+            ))}
+          </select>
           <select value={filters.marca} onChange={(e) => setFilters({ ...filters, marca: e.target.value, modelo: '' })} className="rounded border px-3 py-2 text-sm">
             <option value="">Marca</option>
             {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -402,7 +507,39 @@ export default function ReceptionPage() {
 
         <div className="flex gap-2">
           <button type="button" onClick={loadHistory} className="rounded bg-brand-800 px-3 py-2 text-sm text-white">Filtrar</button>
-          <button type="button" onClick={() => { setFilters({ tipo: '', marca: '', modelo: '', from: '', to: '' }); setTimeout(loadHistory, 0) }} className="rounded border px-3 py-2 text-sm">Limpiar</button>
+          <button type="button" onClick={() => { setFilters({ tipo: '', marca: '', modelo: '', location: '', from: '', to: '' }); setTimeout(loadHistory, 0) }} className="rounded border px-3 py-2 text-sm">Limpiar</button>
+        </div>
+
+        <div className="overflow-x-auto rounded border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left">Producto</th>
+                <th className="px-3 py-2 text-left">Ubicación</th>
+                <th className="px-3 py-2 text-left">Tipo</th>
+                <th className="px-3 py-2 text-left">Cantidad total</th>
+                <th className="px-3 py-2 text-left">Seriales</th>
+                <th className="px-3 py-2 text-left">Última recepción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {inventorySummary.map((row) => (
+                <tr key={`${row.product}-${row.location}-${row.tipo}`}>
+                  <td className="px-3 py-2 font-medium text-gray-900">{row.product}</td>
+                  <td className="px-3 py-2 text-gray-700">{row.location}</td>
+                  <td className="px-3 py-2 text-gray-700">{row.tipo === 'nuevo' ? 'Nuevo' : 'Usado/Reparación'}</td>
+                  <td className="px-3 py-2 text-gray-700">{row.cantidad}</td>
+                  <td className="px-3 py-2 text-gray-700">{row.seriales.length ? row.seriales.join(', ') : '—'}</td>
+                  <td className="px-3 py-2 text-gray-700">{new Date(row.ultimaRecepcion).toLocaleString('es-DO')}</td>
+                </tr>
+              ))}
+              {inventorySummary.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-gray-500">Sin mercancía recibida todavía.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         <div className="overflow-x-auto rounded border border-gray-200">
@@ -411,6 +548,7 @@ export default function ReceptionPage() {
               <tr>
                 <th className="px-3 py-2 text-left">Recepción</th>
                 <th className="px-3 py-2 text-left">Fecha</th>
+                <th className="px-3 py-2 text-left">Ubicación</th>
                 <th className="px-3 py-2 text-left">Entrega</th>
                 <th className="px-3 py-2 text-left">Líneas</th>
                 <th className="px-3 py-2 text-left">Acción</th>
@@ -421,6 +559,7 @@ export default function ReceptionPage() {
                 <tr key={group.receptionId}>
                   <td className="px-3 py-2 font-medium text-gray-900">{group.receptionId}</td>
                   <td className="px-3 py-2 text-gray-700">{new Date(group.fecha).toLocaleString('es-DO')}</td>
+                  <td className="px-3 py-2 text-gray-700">{group.rows[0]?.ubicacion_breadcrumb || group.rows[0]?.ubicacion_name || '—'}</td>
                   <td className="px-3 py-2 text-gray-700">{`${group.rows[0]?.entregado_por_nombre || ''} ${group.rows[0]?.entregado_por_apellido || ''}`.trim() || '—'}</td>
                   <td className="px-3 py-2 text-gray-700">{group.rows.map((r) => `${r.marca_name} ${r.modelo_name} (${r.cantidad})`).join(', ')}</td>
                   <td className="px-3 py-2">
@@ -472,12 +611,13 @@ export default function ReceptionPage() {
                 </tr>
               ))}
               {groupedHistory.length === 0 && (
-                <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-500">Sin registros</td></tr>
+                <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-500">Sin registros</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
     </div>
   )
 }

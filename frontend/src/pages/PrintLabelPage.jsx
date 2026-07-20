@@ -40,7 +40,7 @@ export default function PrintLabelPage() {
     <div className="min-h-screen bg-gray-100 print:bg-white print:min-h-0">
       <div className="no-print bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <Link
-          to={`/inventory/${item.id}`}
+          to={`/products/${item.id}`}
           className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
         >
           <ArrowLeftIcon className="h-4 w-4 mr-1" />

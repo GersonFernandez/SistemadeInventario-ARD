@@ -16,7 +16,14 @@ from inventory.models import (
     LocationType,
     StockMovement,
 )
-from workorders.models import Despacho, LineaDespacho, Solicitante
+from workorders.models import (
+    Despacho,
+    LineaDespacho,
+    Solicitante,
+    ServiceOrder,
+    ServiceOrderItem,
+    ServiceOrderLog,
+)
 
 User = get_user_model()
 
@@ -40,6 +47,11 @@ class Command(BaseCommand):
             type=int,
             default=int(os.environ.get("SEED_DEV_COUNT", "100")),
             help="Cantidad base de registros a generar (default: 100)",
+        )
+        parser.add_argument(
+            "--wipe-all",
+            action="store_true",
+            help="Borra toda la data de desarrollo antes de regenerarla.",
         )
         parser.add_argument(
             "--force",
@@ -73,16 +85,19 @@ class Command(BaseCommand):
         self.stdout.write(f"Generando datos base: {count}")
 
         with transaction.atomic():
-            if options.get("reset"):
+            if options.get("wipe_all"):
+                self._wipe_all_data()
+            elif options.get("reset"):
                 self._reset_seed_data()
-            admin_user = self._ensure_users()
+            users = self._ensure_users()
             categories = self._ensure_categories()
             locations = self._ensure_locations()
             items = self._ensure_items(count, categories, locations)
             tool_units = self._ensure_tool_units(count, items)
             solicitantes = self._ensure_solicitantes(count)
-            self._ensure_despachos(count, admin_user, solicitantes, items, locations)
-            self._ensure_loans(count, admin_user, solicitantes, tool_units)
+            self._ensure_despachos(count, users['admin'], solicitantes, items, locations)
+            self._ensure_loans(count, users['admin'], solicitantes, tool_units)
+            self._ensure_service_orders(count, users, items, locations)
 
         self.stdout.write(self.style.SUCCESS("Seed de desarrollo completado."))
 
@@ -106,21 +121,77 @@ class Command(BaseCommand):
         ).count()
         StockMovement.objects.filter(document_number__startswith="DEV-ENTRY-").delete()
 
-        deleted_units = ItemUnit.objects.filter(serial_number__startswith="DEV-UNIT-").count()
-        ItemUnit.objects.filter(serial_number__startswith="DEV-UNIT-").delete()
+        retained_units = ItemUnit.objects.filter(serial_number__startswith="DEV-UNIT-").count()
+        retained_items = Item.objects.filter(name__startswith="DEV-ITEM-").count()
+        retained_solicitantes = Solicitante.objects.filter(name__startswith="DEV-SOL-").count()
 
-        deleted_items = Item.objects.filter(name__startswith="DEV-ITEM-").count()
-        Item.objects.filter(name__startswith="DEV-ITEM-").delete()
-
-        deleted_solicitantes = Solicitante.objects.filter(name__startswith="DEV-SOL-").count()
-        Solicitante.objects.filter(name__startswith="DEV-SOL-").delete()
+        service_order_qs = ServiceOrder.objects.filter(notes__icontains="seed-dev-service-order")
+        deleted_service_logs = ServiceOrderLog.objects.filter(
+            service_order__in=service_order_qs
+        ).count()
+        deleted_service_lines = ServiceOrderItem.objects.filter(
+            service_order__in=service_order_qs
+        ).count()
+        deleted_service_orders = service_order_qs.count()
+        service_order_qs.delete()
 
         self.stdout.write(
             "  [OK] Reset seed DEV: "
             f"loans={deleted_loans}, lineas={deleted_lineas}, despachos={deleted_despachos}, "
-            f"movements={deleted_movements}, units={deleted_units}, items={deleted_items}, "
-            f"solicitantes={deleted_solicitantes}"
+            f"movements={deleted_movements}, units_retained={retained_units}, items_retained={retained_items}, "
+            f"solicitantes_retained={retained_solicitantes}, service_orders={deleted_service_orders}, "
+            f"service_lines={deleted_service_lines}, service_logs={deleted_service_logs}"
         )
+
+    def _wipe_all_data(self):
+        from inventory.models import (
+            Brand,
+            Category,
+            InstallationRecord,
+            Item,
+            ItemLoan,
+            ItemUnit,
+            Location,
+            LocationType,
+            ProductModel,
+            ProductState,
+            RepairRecord,
+            StockMovement,
+            Transfer,
+            EntradaProducto,
+            EntradaProductoAttachment,
+        )
+
+        from workorders.models import Despacho, LineaDespacho, ServiceOrder, ServiceOrderItem, ServiceOrderLog, Solicitante
+
+        self.stdout.write("  [WARN] Borrando toda la data de desarrollo existente...")
+
+        ServiceOrderLog.objects.all().delete()
+        ServiceOrderItem.objects.all().delete()
+        LineaDespacho.objects.all().delete()
+        ItemLoan.objects.all().delete()
+        Despacho.objects.all().delete()
+        ServiceOrder.objects.all().delete()
+        Solicitante.objects.all().delete()
+
+        EntradaProductoAttachment.objects.all().delete()
+        EntradaProducto.objects.all().delete()
+        RepairRecord.objects.all().delete()
+        InstallationRecord.objects.all().delete()
+        Transfer.objects.all().delete()
+        StockMovement.objects.all().delete()
+        ItemUnit.objects.all().delete()
+        Item.objects.all().delete()
+        Location.objects.all().delete()
+        LocationType.objects.all().delete()
+        ProductModel.objects.all().delete()
+        ProductState.objects.all().delete()
+        Brand.objects.all().delete()
+        Category.objects.all().delete()
+
+        User.objects.all().delete()
+
+        self.stdout.write("  [OK] Data de aplicación limpiada por completo")
 
     def _ensure_users(self):
         users = [
@@ -151,6 +222,8 @@ class Command(BaseCommand):
         ]
 
         admin_user = None
+        almacenista_user = None
+        tecnico_user = None
         for cfg in users:
             user, _ = User.objects.get_or_create(
                 email=cfg["email"],
@@ -172,9 +245,17 @@ class Command(BaseCommand):
 
             if user.role == User.Role.ADMIN:
                 admin_user = user
+            elif user.role == User.Role.ALMACENISTA:
+                almacenista_user = user
+            elif user.role == User.Role.TECNICO:
+                tecnico_user = user
 
         self.stdout.write("  [OK] Usuarios dev listos")
-        return admin_user
+        return {
+            "admin": admin_user,
+            "almacenista": almacenista_user,
+            "tecnico": tecnico_user,
+        }
 
     def _ensure_categories(self):
         categories_seed = [
@@ -377,3 +458,135 @@ class Command(BaseCommand):
 
         total = ItemLoan.objects.filter(notes__icontains="seed-dev-100").count()
         self.stdout.write(f"  [OK] Prestamos seed dev: {total}")
+
+    def _ensure_service_orders(self, count, users, items, locations):
+        base_products = [item for item in items if item.is_base_product and item.is_active]
+        if not base_products:
+            base_products = list(
+                Item.objects.filter(is_base_product=True, is_active=True).order_by('id')[:count]
+            )
+
+        if not base_products:
+            self.stdout.write("  [WARN] No hay productos base para generar ordenes de servicio")
+            return
+
+        admin_user = users['admin']
+        technician_user = users['tecnico']
+        almacenista_user = users['almacenista'] or admin_user
+
+        existing = ServiceOrder.objects.filter(notes__icontains="seed-dev-service-order").count()
+        to_create = max(0, count - existing)
+        now = timezone.now()
+
+        service_types = [
+            ServiceOrder.ServiceType.REPARACION,
+            ServiceOrder.ServiceType.INSTALACION,
+            ServiceOrder.ServiceType.MANTENIMIENTO,
+        ]
+        statuses = [
+            ServiceOrder.Status.RECIBIDO,
+            ServiceOrder.Status.EN_DIAGNOSTICO,
+            ServiceOrder.Status.EN_PROCESO,
+            ServiceOrder.Status.PENDIENTE_REPUESTO,
+            ServiceOrder.Status.COMPLETADO,
+            ServiceOrder.Status.ENTREGADO,
+        ]
+
+        for i in range(existing + 1, existing + to_create + 1):
+            service_type = service_types[(i - 1) % len(service_types)]
+            status = statuses[(i - 1) % len(statuses)]
+            location = locations[(i - 1) % len(locations)] if locations else None
+            primary_item = base_products[(i - 1) % len(base_products)]
+            created_by = admin_user if i % 2 else almacenista_user
+            received_at = now - timedelta(days=(i % 45), hours=(i % 6))
+
+            diagnosis = ''
+            work_performed = ''
+            if status in (ServiceOrder.Status.EN_PROCESO, ServiceOrder.Status.PENDIENTE_REPUESTO):
+                diagnosis = f"Diagnostico preliminar DEV para orden {i:04d}."
+            if status in (ServiceOrder.Status.COMPLETADO, ServiceOrder.Status.ENTREGADO):
+                diagnosis = f"Diagnostico final DEV para orden {i:04d}."
+                work_performed = f"Trabajo realizado DEV en equipo y verificacion operativa de la orden {i:04d}."
+
+            service_order = ServiceOrder.objects.create(
+                service_type=service_type,
+                equipment=primary_item,
+                equipment_serial_number=f"DEV-SRV-{i:05d}-01",
+                equipment_condition=(
+                    ServiceOrder.EquipmentCondition.NUEVO if i % 4 == 0 else ServiceOrder.EquipmentCondition.USADO
+                ),
+                assigned_technician=technician_user,
+                created_by=created_by,
+                unit=location,
+                recipient_first_name=f"Nombre{i:03d}",
+                recipient_last_name=f"Apellido{i:03d}",
+                recipient_id_card=f"402-{i:07d}-1",
+                recipient_rank_position=(
+                    "Teniente de Navio" if i % 2 else "Encargado de Comunicaciones"
+                ),
+                status=status,
+                diagnosis=diagnosis,
+                work_performed=work_performed,
+                notes="seed-dev-service-order",
+            )
+
+            line_count = 1 + (i % 3)
+            for line_index in range(line_count):
+                line_item = base_products[(i - 1 + line_index) % len(base_products)]
+                ServiceOrderItem.objects.create(
+                    service_order=service_order,
+                    item=line_item,
+                    serial_number=f"DEV-SRV-{i:05d}-{line_index + 1:02d}",
+                    description=(
+                        f"Linea DEV {line_index + 1} para {service_order.get_service_type_display().lower()}"
+                    ),
+                    equipment_condition=(
+                        ServiceOrder.EquipmentCondition.NUEVO
+                        if (i + line_index) % 4 == 0
+                        else ServiceOrder.EquipmentCondition.USADO
+                    ),
+                )
+
+            update_fields = ['received_at', 'updated_at']
+            service_order.received_at = received_at
+            service_order.updated_at = received_at
+
+            if status in (ServiceOrder.Status.COMPLETADO, ServiceOrder.Status.ENTREGADO):
+                service_order.completed_at = received_at + timedelta(days=1, hours=2)
+                update_fields.append('completed_at')
+            if status == ServiceOrder.Status.ENTREGADO:
+                service_order.delivered_at = service_order.completed_at + timedelta(hours=6)
+                update_fields.append('delivered_at')
+
+            service_order.save(update_fields=update_fields)
+
+            ServiceOrderLog.objects.create(
+                service_order=service_order,
+                actor=created_by,
+                event='created',
+                to_status=ServiceOrder.Status.RECIBIDO,
+                note='Orden seed dev creada.',
+            )
+
+            if status != ServiceOrder.Status.RECIBIDO:
+                ServiceOrderLog.objects.create(
+                    service_order=service_order,
+                    actor=technician_user,
+                    event='status_transition',
+                    from_status=ServiceOrder.Status.RECIBIDO,
+                    to_status=status,
+                    note=f'Cambio de estado DEV hacia {service_order.get_status_display()}.',
+                )
+
+            if diagnosis:
+                ServiceOrderLog.objects.create(
+                    service_order=service_order,
+                    actor=technician_user,
+                    event='note',
+                    from_status=status,
+                    to_status=status,
+                    note=diagnosis,
+                )
+
+        total = ServiceOrder.objects.filter(notes__icontains="seed-dev-service-order").count()
+        self.stdout.write(f"  [OK] Ordenes de servicio seed dev: {total}")

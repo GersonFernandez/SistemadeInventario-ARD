@@ -30,8 +30,10 @@ class IsAssignedTechnicianOrAdmin(permissions.BasePermission):
             return True
 
         if user.role == 'tecnico':
-            if obj.technician != user:
+            assigned_user = getattr(obj, 'technician', None) or getattr(obj, 'assigned_technician', None)
+            if assigned_user != user:
                 return False
-            return request.method in permissions.SAFE_METHODS or getattr(view, 'action', None) == 'request_part'
+            action = getattr(view, 'action', None)
+            return request.method in permissions.SAFE_METHODS or action in ('request_part', 'transition', 'add_note', 'complete_service')
 
         return False

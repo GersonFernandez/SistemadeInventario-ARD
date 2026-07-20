@@ -85,6 +85,7 @@ export const inventoryApi = {
 
   getInstallations: (params = {}) => api.get('/inventory/installations/', { params }),
   createInstallation: (data) => api.post('/inventory/installations/', data),
+  createInstallationBatch: (data) => api.post('/inventory/installations/create_batch/', data),
   updateInstallation: (id, data) => api.put(`/inventory/installations/${id}/`, data),
   deleteInstallation: (id) => api.delete(`/inventory/installations/${id}/`),
 

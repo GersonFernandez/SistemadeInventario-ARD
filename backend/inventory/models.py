@@ -239,6 +239,10 @@ class Item(DirtyFieldsMixin, models.Model):
         help_text='Si True, el stock se cuenta por unidades físicas con serial (ItemUnit). Solo aplica a kind=herramienta.',
     )
     image = models.ImageField(upload_to='items/%Y/%m/', blank=True, null=True)
+    is_base_product = models.BooleanField(
+        default=True,
+        help_text='Indica si este artículo forma parte del catálogo base para recepción, instalación, reparación y servicios.',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -567,6 +571,8 @@ class InstallationRecord(DirtyFieldsMixin, models.Model):
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='installation_records')
     technician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='installations')
     location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='installations')
+    serial_number = models.CharField(max_length=100, blank=True)
+    state_snapshot = models.CharField(max_length=100, blank=True)
     installed_at = models.DateTimeField(default=timezone.now)
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
@@ -591,6 +597,14 @@ class EntradaProducto(DirtyFieldsMixin, models.Model):
     marca = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='entradas_producto')
     modelo = models.ForeignKey(ProductModel, on_delete=models.PROTECT, related_name='entradas_producto')
     categoria = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='entradas_producto')
+    base_product = models.ForeignKey(
+        Item,
+        on_delete=models.PROTECT,
+        related_name='entradas_producto',
+        null=True,
+        blank=True,
+        help_text='Producto base registrado al que corresponde esta recepción.',
+    )
     tipo = models.CharField(max_length=20, choices=Tipo.choices)
     cantidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     seriales = models.JSONField(default=list, blank=True)

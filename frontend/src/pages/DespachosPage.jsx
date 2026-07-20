@@ -16,6 +16,8 @@ export default function DespachosPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [solicitanteFilter, setSolicitanteFilter] = useState('')
+  const [reportFrom, setReportFrom] = useState('')
+  const [reportTo, setReportTo] = useState('')
 
   useEffect(() => {
     fetchDespachos()
@@ -48,6 +50,19 @@ export default function DespachosPage() {
     }
   }
 
+  const handleDownloadReceptionDispatchReport = async (format) => {
+    try {
+      const params = {}
+      if (reportFrom) params.from = reportFrom
+      if (reportTo) params.to = reportTo
+      const response = await despachoApi.downloadReceptionDispatchReport(format, params)
+      const extension = format === 'pdf' ? 'pdf' : 'xlsx'
+      downloadBlob(response, `recepcion_vs_despacho_${new Date().toISOString().slice(0, 10)}.${extension}`)
+    } catch (error) {
+      toast.error('Error al generar reporte de recepción vs despacho')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -74,6 +89,47 @@ export default function DespachosPage() {
             <PlusIcon className="h-4 w-4" />
             Nuevo Despacho
           </Link>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold text-gray-600">Desde</label>
+              <input
+                type="date"
+                value={reportFrom}
+                onChange={(e) => setReportFrom(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600">Hasta</label>
+              <input
+                type="date"
+                value={reportTo}
+                onChange={(e) => setReportTo(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleDownloadReceptionDispatchReport('pdf')}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <DocumentArrowDownIcon className="h-4 w-4" />
+              Rec vs Desp PDF
+            </button>
+            <button
+              onClick={() => handleDownloadReceptionDispatchReport('excel')}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <DocumentArrowDownIcon className="h-4 w-4" />
+              Rec vs Desp Excel
+            </button>
+          </div>
         </div>
       </div>
 

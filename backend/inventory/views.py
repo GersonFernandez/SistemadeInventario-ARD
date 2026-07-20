@@ -45,6 +45,7 @@ from .serializers import (
     ItemLoanSerializer,
     RepairRecordSerializer,
     InstallationRecordSerializer,
+    InstallationBatchCreateSerializer,
     EntradaProductoSerializer,
     EntradaProductoAttachmentSerializer,
     EntradaProductoBatchCreateSerializer,
@@ -56,10 +57,11 @@ class ItemFilter(FilterSet):
     category = NumberFilter(field_name='category__id')
     location = NumberFilter(field_name='location__id')
     kind = django_filters.CharFilter(field_name='kind')
+    is_base_product = django_filters.BooleanFilter(field_name='is_base_product')
 
     class Meta:
         model = Item
-        fields = ['category', 'is_active', 'location', 'kind', 'track_by_serial']
+        fields = ['category', 'is_active', 'location', 'kind', 'track_by_serial', 'is_base_product']
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -194,6 +196,15 @@ class ItemViewSet(viewsets.ModelViewSet):
         search = self.request.query_params.get('search')
         critical = self.request.query_params.get('critical')
         kind = self.request.query_params.get('kind')
+        for_reception = self.request.query_params.get('for_reception')
+
+        if for_reception is not None and for_reception.lower() in ('true', '1'):
+            queryset = queryset.filter(
+                is_base_product=True,
+                brand__isnull=False,
+                product_model__isnull=False,
+                category__isnull=False,
+            )
 
         if search:
             queryset = queryset.filter(
@@ -738,15 +749,66 @@ class InstallationRecordViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         technician = serializer.validated_data.get('technician') or self.request.user
+        state = serializer.validated_data.get('item').state
+        state_snapshot = state.name if state else ''
         installation = serializer.save(technician=technician)
+        installation.state_snapshot = state_snapshot
+        installation.save(update_fields=['state_snapshot'])
 
         installed_state = ProductState.objects.filter(code='instalado').first()
         installation.item.location = installation.location
+        installation.item.numero_serie = installation.serial_number
         if installed_state:
             installation.item.state = installed_state
-            installation.item.save(update_fields=['location', 'state'])
+            installation.item.save(update_fields=['location', 'numero_serie', 'state'])
         else:
-            installation.item.save(update_fields=['location'])
+            installation.item.save(update_fields=['location', 'numero_serie'])
+
+    @action(detail=False, methods=['post'])
+    def create_batch(self, request):
+        serializer = InstallationBatchCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+        location = validated['location']
+        installed_at = validated.get('installed_at') or timezone.now()
+        common_notes = validated.get('notes', '')
+        rows = validated['items']
+
+        created = []
+        installed_state_default = ProductState.objects.filter(code='instalado').first()
+
+        with transaction.atomic():
+            for row in rows:
+                item = row['item']
+                state = row.get('state') or installed_state_default
+                row_notes = row.get('notes', '')
+                merged_notes = row_notes or common_notes
+
+                record = InstallationRecord.objects.create(
+                    item=item,
+                    technician=request.user,
+                    location=location,
+                    serial_number=row['serial_number'],
+                    state_snapshot=state.name if state else '',
+                    installed_at=installed_at,
+                    notes=merged_notes,
+                )
+
+                item.location = location
+                item.numero_serie = row['serial_number']
+                if state:
+                    item.state = state
+                    item.save(update_fields=['location', 'numero_serie', 'state'])
+                else:
+                    item.save(update_fields=['location', 'numero_serie'])
+
+                created.append(record)
+
+        return Response(
+            InstallationRecordSerializer(created, many=True).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -756,12 +818,13 @@ class InstallationRecordViewSet(viewsets.ModelViewSet):
 class EntradaProductoFilter(FilterSet):
     marca = NumberFilter(field_name='marca__id')
     modelo = NumberFilter(field_name='modelo__id')
+    ubicacion = NumberFilter(field_name='ubicacion__id')
     tipo = django_filters.CharFilter(field_name='tipo')
     fecha_recepcion = django_filters.DateFromToRangeFilter(field_name='fecha_recepcion')
 
     class Meta:
         model = EntradaProducto
-        fields = ['marca', 'modelo', 'tipo', 'fecha_recepcion']
+        fields = ['marca', 'modelo', 'ubicacion', 'tipo', 'fecha_recepcion']
 
 
 class EntradaProductoViewSet(viewsets.ModelViewSet):
@@ -800,6 +863,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         reception_id = f"REC-{timezone.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
         fecha_recepcion = serializer.validated_data.get('fecha_recepcion') or timezone.now()
         observaciones_global = serializer.validated_data.get('observaciones', '')
+        ubicacion = serializer.validated_data['ubicacion']
         entregado_por_nombre = serializer.validated_data['entregado_por_nombre']
         entregado_por_apellido = serializer.validated_data['entregado_por_apellido']
         entregado_por_cedula = serializer.validated_data['entregado_por_cedula']
@@ -810,6 +874,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             for idx, linea in enumerate(lineas, start=1):
                 try:
+                    base_product = linea.get('item') or self._resolve_base_product_for_line(linea)
                     seriales = self._prepare_seriales(
                         tipo=linea['tipo'],
                         cantidad=linea['cantidad'],
@@ -830,9 +895,11 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                     marca=linea['marca'],
                     modelo=linea['modelo'],
                     categoria=linea['categoria'],
+                    base_product=base_product,
                     tipo=linea['tipo'],
                     cantidad=linea['cantidad'],
                     seriales=seriales,
+                    ubicacion=ubicacion,
                     observaciones=(linea.get('observaciones') or observaciones_global or ''),
                     entregado_por_nombre=entregado_por_nombre,
                     entregado_por_apellido=entregado_por_apellido,
@@ -842,7 +909,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                     registrado_por=request.user,
                 )
                 created.append(entrada)
-                self._register_inventory_for_line(entrada)
+                self._register_inventory_for_line(entrada, base_product=base_product)
 
             for uploaded in request.FILES.getlist('photos'):
                 EntradaProductoAttachment.objects.create(
@@ -981,32 +1048,28 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         model = ''.join([c for c in modelo.upper() if c.isalnum()])[:4] or 'MODL'
         return [f"AUT-{mark}-{model}-{base}-{index_offset + i:02d}" for i in range(cantidad)]
 
-    def _register_inventory_for_line(self, entrada):
-        item_name = f"{entrada.marca.name} {entrada.modelo.name}".strip()
-        item, _ = Item.objects.get_or_create(
-            name=item_name,
-            category=entrada.categoria,
-            defaults={
-                'location': entrada.ubicacion,
-                'kind': Item.Kind.HERRAMIENTA if entrada.tipo == EntradaProducto.Tipo.USADO else Item.Kind.CONSUMIBLE,
-                'track_by_serial': entrada.tipo == EntradaProducto.Tipo.USADO,
-                'marca': entrada.marca.name,
-                'modelo': entrada.modelo.name,
-                'brand': entrada.marca,
-                'product_model': entrada.modelo,
-                'quantity': 0,
-                'minimum_stock': 0,
-                'unit': 'unidad',
-            },
-        )
+    def _resolve_base_product_for_line(self, linea):
+        candidates = Item.objects.filter(
+            is_base_product=True,
+            is_active=True,
+            brand=linea['marca'],
+            product_model=linea['modelo'],
+            category=linea['categoria'],
+        ).order_by('id')
 
-        if item.brand_id != entrada.marca.id or item.product_model_id != entrada.modelo.id:
-            item.brand = entrada.marca
-            item.product_model = entrada.modelo
-            item.marca = entrada.marca.name
-            item.modelo = entrada.modelo.name
-            item.save(update_fields=['brand', 'product_model', 'marca', 'modelo'])
+        count = candidates.count()
+        if count == 0:
+            raise ValueError(
+                f"No existe producto base para {linea['marca'].name} / {linea['modelo'].name} / {linea['categoria'].name}. Regístrelo en el módulo Productos antes de recepción."
+            )
+        if count > 1:
+            raise ValueError(
+                f"Hay múltiples productos base para {linea['marca'].name} / {linea['modelo'].name} / {linea['categoria'].name}. Mantenga un único producto base para esa combinación."
+            )
+        return candidates.first()
 
+    def _register_inventory_for_line(self, entrada, base_product):
+        item = base_product
         if entrada.ubicacion:
             item.location = entrada.ubicacion
         item.quantity += entrada.cantidad

@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from inventory.models import Item, ItemUnit, ItemLoan, StockMovement
+from inventory.models import Item, ItemUnit, ItemLoan, StockMovement, EntradaProducto
 from .models import Despacho, LineaDespacho
 
 
@@ -15,7 +15,7 @@ class DispatchService:
 
     @staticmethod
     @transaction.atomic
-    def create(*, user, solicitante_id, unit_id, equipment_reference, notes, items):
+    def create(*, user, solicitante_id, unit_id, equipment_reference, notes, items, enforce_received_origin=False):
         """Crea un Despacho, sus líneas, y ejecuta los movimientos de stock atómicamente.
 
         Para cada línea:
@@ -67,6 +67,10 @@ class DispatchService:
             item = items_locked[item_id]
             if not item.is_active:
                 raise ValidationError(f'El item {item.name} está inactivo y no puede despacharse.')
+            if enforce_received_origin and not EntradaProducto.objects.filter(base_product_id=item.id).exists():
+                raise ValidationError(
+                    f'El item {item.name} no proviene de recepción de mercancías y no puede despacharse desde este módulo.'
+                )
 
             quantity = int(line.get('quantity', 0))
             if quantity < 1:
@@ -158,12 +162,11 @@ class DispatchService:
         if despacho.is_cancelled():
             raise ValidationError('Este despacho ya está anulado.')
 
-        items_to_restore = {}  # item_id -> total_qty
-        for linea in despacho.lineas.select_for_update().select_related('item', 'item_unit'):
+        for linea in despacho.lineas.select_for_update().all():
             if linea.item_unit_id:
                 try:
                     loan = ItemLoan.objects.select_for_update().get(
-                        item_unit=linea.item_unit, returned_at__isnull=True
+                        item_unit_id=linea.item_unit_id, returned_at__isnull=True
                     )
                 except ItemLoan.DoesNotExist:
                     loan = None

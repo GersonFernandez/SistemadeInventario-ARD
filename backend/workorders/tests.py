@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from inventory.models import Item, ItemUnit, StockMovement, Category, Location, LocationType
-from workorders.models import Despacho, LineaDespacho, Solicitante
+from workorders.models import Despacho, LineaDespacho, Solicitante, ServiceOrder, ServiceOrderItem
 from workorders.services import DispatchService
 
 
@@ -311,3 +311,90 @@ class SolicitanteAPITest(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Solicitante.objects.count(), 1)
+
+
+class ServiceOrderReceiptAPITest(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email='admin.srv@armada.mil.do',
+            password='Admin12345',
+            name='Admin SRV',
+            role='admin',
+        )
+        self.tech = User.objects.create_user(
+            email='tech.srv@armada.mil.do',
+            password='Tech12345',
+            name='Tecnico SRV',
+            role='tecnico',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+        self.cat, _ = Category.objects.get_or_create(
+            name='Equipos',
+            defaults={'abbreviation': 'EQP'},
+        )
+        self.location, _ = Location.objects.get_or_create(
+            codigo='SRV',
+            defaults={'name': 'Taller Servicio', 'location_type': get_or_create_location_type()},
+        )
+        self.item, _ = Item.objects.get_or_create(
+            code='EQP-001',
+            defaults={
+                'name': 'Radio VHF Marino',
+                'category': self.cat,
+                'location': self.location,
+                'quantity': 5,
+                'minimum_stock': 1,
+                'is_base_product': True,
+                'is_active': True,
+            },
+        )
+
+        self.service_order = ServiceOrder.objects.create(
+            service_type=ServiceOrder.ServiceType.REPARACION,
+            equipment=self.item,
+            equipment_serial_number='SRV-ABC-123',
+            equipment_condition=ServiceOrder.EquipmentCondition.USADO,
+            assigned_technician=self.tech,
+            created_by=self.admin,
+            unit=self.location,
+            status=ServiceOrder.Status.COMPLETADO,
+            diagnosis='Falla en etapa de potencia RF.',
+            work_performed='Reemplazo de transistores y calibracion final.',
+            recipient_first_name='Juan',
+            recipient_last_name='Perez',
+            recipient_id_card='001-1234567-8',
+            recipient_rank_position='Teniente de Fragata',
+        )
+        ServiceOrderItem.objects.create(
+            service_order=self.service_order,
+            item=self.item,
+            serial_number='SRV-ABC-123',
+            description='Equipo principal de comunicacion',
+            equipment_condition=ServiceOrder.EquipmentCondition.USADO,
+        )
+
+    def test_download_completion_receipt_pdf(self):
+        response = self.client.get(
+            f'/api/v1/work-orders/service-orders/{self.service_order.id}/completion_receipt/?type=pdf'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('cierre_', response['Content-Disposition'])
+        body = b''.join(response.streaming_content)
+        self.assertGreater(len(body), 1000)
+
+    def test_download_completion_receipt_invalid_format(self):
+        response = self.client.get(
+            f'/api/v1/work-orders/service-orders/{self.service_order.id}/completion_receipt/?type=doc'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_download_completion_receipt_requires_completed_order(self):
+        self.service_order.status = ServiceOrder.Status.EN_PROCESO
+        self.service_order.save(update_fields=['status', 'updated_at'])
+        response = self.client.get(
+            f'/api/v1/work-orders/service-orders/{self.service_order.id}/completion_receipt/?type=pdf'
+        )
+        self.assertEqual(response.status_code, 400)

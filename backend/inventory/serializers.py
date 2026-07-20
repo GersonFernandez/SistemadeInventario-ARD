@@ -411,20 +411,72 @@ class RepairRecordSerializer(serializers.ModelSerializer):
     def get_repairs_count_for_item(self, obj):
         return obj.item.repair_records.filter(is_active=True).count()
 
+    def validate_item(self, value):
+        if not value.is_base_product:
+            raise serializers.ValidationError('Solo se permiten productos base para registrar reparaciones.')
+        if not value.is_active:
+            raise serializers.ValidationError('El producto base seleccionado está inactivo.')
+        return value
+
 
 class InstallationRecordSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     technician_name = serializers.CharField(source='technician.name', read_only=True)
     location_name = serializers.CharField(source='location.name', read_only=True)
+    state_name = serializers.CharField(source='item.state.name', read_only=True, default=None)
 
     class Meta:
         model = InstallationRecord
         fields = [
             'id', 'item', 'item_name', 'technician', 'technician_name',
-            'location', 'location_name', 'installed_at', 'notes', 'is_active',
+            'location', 'location_name', 'serial_number', 'state_snapshot', 'state_name',
+            'installed_at', 'notes', 'is_active',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'item_name', 'technician_name', 'location_name']
+        read_only_fields = [
+            'id', 'created_at', 'updated_at',
+            'item_name', 'technician_name', 'location_name', 'state_name',
+        ]
+
+    def validate_item(self, value):
+        if not value.is_base_product:
+            raise serializers.ValidationError('Solo se permiten productos base para registrar instalaciones.')
+        if not value.is_active:
+            raise serializers.ValidationError('El producto base seleccionado está inactivo.')
+        return value
+
+    def validate(self, attrs):
+        incoming = attrs.get('serial_number', self.instance.serial_number if self.instance else '')
+        serial = (incoming or '').strip()
+        if not serial:
+            raise serializers.ValidationError({'serial_number': 'El número de serie es obligatorio.'})
+        attrs['serial_number'] = serial
+        return attrs
+
+
+class InstallationBatchLineSerializer(serializers.Serializer):
+    item = serializers.PrimaryKeyRelatedField(queryset=Item.objects.filter(is_active=True, is_base_product=True))
+    serial_number = serializers.CharField(max_length=100)
+    state = serializers.PrimaryKeyRelatedField(queryset=ProductState.objects.filter(is_active=True), required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_serial_number(self, value):
+        serial = value.strip()
+        if not serial:
+            raise serializers.ValidationError('El número de serie es obligatorio.')
+        return serial
+
+
+class InstallationBatchCreateSerializer(serializers.Serializer):
+    location = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
+    installed_at = serializers.DateTimeField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    items = InstallationBatchLineSerializer(many=True)
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError('Debe enviar al menos un producto para la instalación.')
+        return value
 
 
 class EntradaProductoAttachmentSerializer(serializers.ModelSerializer):
@@ -440,6 +492,9 @@ class EntradaProductoSerializer(serializers.ModelSerializer):
     marca_name = serializers.CharField(source='marca.name', read_only=True)
     modelo_name = serializers.CharField(source='modelo.name', read_only=True)
     categoria_name = serializers.CharField(source='categoria.name', read_only=True)
+    base_product_name = serializers.CharField(source='base_product.name', read_only=True, default=None)
+    ubicacion_name = serializers.SerializerMethodField()
+    ubicacion_breadcrumb = serializers.SerializerMethodField()
     registrado_por_name = serializers.CharField(source='registrado_por.name', read_only=True)
     adjuntos = serializers.SerializerMethodField()
 
@@ -449,7 +504,9 @@ class EntradaProductoSerializer(serializers.ModelSerializer):
             'id', 'reception_id',
             'marca', 'marca_name', 'modelo', 'modelo_name',
             'categoria', 'categoria_name',
+            'base_product', 'base_product_name',
             'tipo', 'cantidad', 'seriales',
+            'ubicacion', 'ubicacion_name', 'ubicacion_breadcrumb',
             'observaciones',
             'entregado_por_nombre', 'entregado_por_apellido', 'entregado_por_cedula', 'entregado_por_rango_cargo',
             'fecha_recepcion', 'fecha_entrada',
@@ -462,23 +519,69 @@ class EntradaProductoSerializer(serializers.ModelSerializer):
         files = EntradaProductoAttachment.objects.filter(reception_id=obj.reception_id)
         return EntradaProductoAttachmentSerializer(files, many=True).data
 
+    def get_ubicacion_name(self, obj):
+        return obj.ubicacion.name if obj.ubicacion else None
+
+    def get_ubicacion_breadcrumb(self, obj):
+        return obj.ubicacion.get_breadcrumb() if obj.ubicacion else None
+
 
 class EntradaProductoLineInputSerializer(serializers.Serializer):
+    item = serializers.PrimaryKeyRelatedField(queryset=Item.objects.filter(is_active=True), required=False, allow_null=True)
     tipo = serializers.ChoiceField(choices=EntradaProducto.Tipo.choices)
-    marca = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('marca').remote_field.model.objects.filter(is_active=True))
-    modelo = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('modelo').remote_field.model.objects.filter(is_active=True))
-    categoria = serializers.PrimaryKeyRelatedField(queryset=EntradaProducto._meta.get_field('categoria').remote_field.model.objects.all())
+    marca = serializers.PrimaryKeyRelatedField(
+        queryset=EntradaProducto._meta.get_field('marca').remote_field.model.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    modelo = serializers.PrimaryKeyRelatedField(
+        queryset=EntradaProducto._meta.get_field('modelo').remote_field.model.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    categoria = serializers.PrimaryKeyRelatedField(
+        queryset=EntradaProducto._meta.get_field('categoria').remote_field.model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     cantidad = serializers.IntegerField(min_value=1)
     seriales = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
     observaciones = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
+        selected_item = attrs.get('item')
+        if selected_item:
+            if not selected_item.is_base_product:
+                raise serializers.ValidationError({'item': 'Seleccione un producto base para la recepción.'})
+
+            if not selected_item.brand_id or not selected_item.product_model_id or not selected_item.category_id:
+                raise serializers.ValidationError(
+                    {'item': 'El producto base seleccionado no tiene marca, modelo o categoría configurados.'}
+                )
+
+            attrs['marca'] = attrs.get('marca') or selected_item.brand
+            attrs['modelo'] = attrs.get('modelo') or selected_item.product_model
+            attrs['categoria'] = attrs.get('categoria') or selected_item.category
+
+            if selected_item.brand_id != attrs['marca'].id:
+                raise serializers.ValidationError({'marca': 'La marca no coincide con el producto seleccionado.'})
+            if selected_item.product_model_id != attrs['modelo'].id:
+                raise serializers.ValidationError({'modelo': 'El modelo no coincide con el producto seleccionado.'})
+            if selected_item.category_id != attrs['categoria'].id:
+                raise serializers.ValidationError({'categoria': 'La categoría no coincide con el producto seleccionado.'})
+
+        if not selected_item and (not attrs.get('marca') or not attrs.get('modelo') or not attrs.get('categoria')):
+            raise serializers.ValidationError({
+                'linea': 'Debe seleccionar un producto base o completar marca, modelo y categoría.',
+            })
+
         if attrs['modelo'].brand_id != attrs['marca'].id:
             raise serializers.ValidationError({'modelo': 'El modelo no pertenece a la marca seleccionada.'})
         return attrs
 
 
 class EntradaProductoBatchCreateSerializer(serializers.Serializer):
+    ubicacion = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
     fecha_recepcion = serializers.DateTimeField(required=False)
     observaciones = serializers.CharField(required=False, allow_blank=True)
     entregado_por_nombre = serializers.CharField(max_length=120)

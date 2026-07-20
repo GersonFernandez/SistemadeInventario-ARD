@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MagnifyingGlassIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { inventoryApi } from '../services/inventoryApi'
+import { despachoApi } from '../services/workOrderApi'
 
 const STATE_STYLES = {
   ok: 'bg-green-100 text-green-800 border-green-200',
@@ -14,11 +15,12 @@ const STATE_LABEL = {
   asignado: 'Asignado',
 }
 
-export default function ItemSelector({ onSelect, disabled = false }) {
+export default function ItemSelector({ onSelect, disabled = false, source = 'inventory' }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [showList, setShowList] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [manualSearchTick, setManualSearchTick] = useState(0)
   const [selectedItem, setSelectedItem] = useState(null)
   const [units, setUnits] = useState([])
   const [loadingUnits, setLoadingUnits] = useState(false)
@@ -26,10 +28,17 @@ export default function ItemSelector({ onSelect, disabled = false }) {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      if (query.length >= 2) {
+      if (query.length >= 2 || manualSearchTick > 0) {
         setLoading(true)
-        inventoryApi
-          .getItems({ search: query, is_active: true, page_size: 10 })
+        const request = source === 'dispatch'
+          ? (query.length >= 2
+            ? despachoApi.getDispatchableItems({ search: query, page_size: 10 })
+            : despachoApi.getDispatchableItems({ page_size: 10 }))
+          : (query.length >= 2
+            ? inventoryApi.getItems({ search: query, is_active: true, page_size: 10 })
+            : inventoryApi.getItems({ is_active: true, page_size: 10 }))
+
+        request
           .then((r) => setResults(r.data.results || r.data))
           .finally(() => setLoading(false))
       } else {
@@ -37,7 +46,7 @@ export default function ItemSelector({ onSelect, disabled = false }) {
       }
     }, 250)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, source, manualSearchTick])
 
   useEffect(() => {
     function handleClick(e) {
@@ -84,6 +93,12 @@ export default function ItemSelector({ onSelect, disabled = false }) {
     setQuery('')
   }
 
+  const handleSearchClick = () => {
+    if (disabled) return
+    setShowList(true)
+    setManualSearchTick((prev) => prev + 1)
+  }
+
   if (selectedItem) {
     return (
       <div className="rounded-md border border-gray-300 bg-gray-50 p-3">
@@ -114,7 +129,7 @@ export default function ItemSelector({ onSelect, disabled = false }) {
   return (
     <div ref={wrapperRef} className="relative">
       <div className="relative">
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
           type="text"
           value={query}
@@ -124,11 +139,24 @@ export default function ItemSelector({ onSelect, disabled = false }) {
           }}
           onFocus={() => setShowList(true)}
           disabled={disabled}
-          placeholder="Buscar artículo del inventario por nombre, código o SKU..."
-          className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+          placeholder={
+            source === 'dispatch'
+              ? 'Buscar mercancía recibida por nombre, código o SKU...'
+              : 'Buscar artículo del inventario por nombre, código o SKU...'
+          }
+          className="w-full rounded-md border border-gray-300 pl-9 pr-10 py-2 text-sm focus:border-brand-700 focus:outline-none focus:ring-brand-700"
         />
+        <button
+          type="button"
+          onClick={handleSearchClick}
+          disabled={disabled}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+          title="Buscar productos"
+        >
+          <MagnifyingGlassIcon className="h-4 w-4" />
+        </button>
       </div>
-      {showList && (query.length >= 2 || loading) && (
+      {showList && (query.length >= 2 || manualSearchTick > 0 || loading) && (
         <ul className="absolute z-20 mt-1 max-h-80 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
           {loading && <li className="px-3 py-2 text-sm text-gray-500">Buscando...</li>}
           {!loading && results.length === 0 && (
@@ -153,6 +181,9 @@ export default function ItemSelector({ onSelect, disabled = false }) {
                       ? `${item.stock_available} disp. / ${item.units_count} total`
                       : `${item.quantity} ${item.unit}`}
                   </span>
+                  {source === 'dispatch' && Number(item.received_quantity || 0) > 0 && (
+                    <span className="text-[10px] text-gray-500">Recibido: {item.received_quantity}</span>
+                  )}
                   <span
                     className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium ${
                       STATE_STYLES[item.availability_state] || 'bg-gray-100 text-gray-700 border-gray-200'

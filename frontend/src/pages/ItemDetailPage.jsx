@@ -81,7 +81,7 @@ export default function ItemDetailPage() {
       }
     } catch (error) {
       toast.error('Error al cargar el artículo')
-      navigate('/inventory')
+      navigate('/products')
     } finally {
       setLoading(false)
     }
@@ -251,7 +251,7 @@ export default function ItemDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Link
-          to="/inventory"
+          to="/products"
           className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
         >
           <ArrowLeftIcon className="h-4 w-4 mr-1" />
@@ -295,7 +295,7 @@ export default function ItemDetailPage() {
         <div className="flex items-start justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">Código de barras</h3>
           <Link
-            to={`/inventory/${item.id}/print-label`}
+            to={`/products/${item.id}/print-label`}
             className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             target="_blank"
           >
@@ -580,7 +580,7 @@ export default function ItemDetailPage() {
                   </button>
                 )}
                 <Link
-                  to={`/inventory/${item.id}/edit`}
+                  to={`/products/${item.id}/edit`}
                   className="block w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Editar artículo

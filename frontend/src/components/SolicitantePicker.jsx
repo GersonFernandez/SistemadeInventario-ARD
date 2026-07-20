@@ -1,204 +1,190 @@
-import { useState, useEffect, useRef } from 'react'
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import toast from 'react-hot-toast'
+import { useEffect, useRef, useState } from 'react'
+import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { solicitanteApi } from '../services/workOrderApi'
-import { inventoryApi } from '../services/inventoryApi'
 
 export default function SolicitantePicker({ value, onChange, disabled = false }) {
   const [solicitantes, setSolicitantes] = useState([])
   const [query, setQuery] = useState('')
   const [showList, setShowList] = useState(false)
-  const [showModal, setShowModal] = useState(false)
-  const [locations, setLocations] = useState([])
-  const [form, setForm] = useState({ name: '', rank: '', unit: '', agent_id: '', notes: '' })
-  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [manualSearchTick, setManualSearchTick] = useState(0)
   const wrapperRef = useRef(null)
 
+  const currentValue = value && typeof value === 'object' ? value : null
+
   useEffect(() => {
-    if (value && typeof value === 'object') {
-      setQuery(value.full_name || value.name)
-    } else if (!value) {
+    if (currentValue) {
+      setQuery(currentValue.full_name || currentValue.name || '')
+    } else {
       setQuery('')
     }
-  }, [value])
+  }, [currentValue])
 
   useEffect(() => {
-    if (showModal) {
-      inventoryApi.getLocations().then((r) => setLocations(r.data.results || r.data))
-    }
-  }, [showModal])
+    const t = setTimeout(() => {
+      if (showList && (query.length >= 2 || manualSearchTick > 0) && !currentValue) {
+        setLoading(true)
+        const request = query.length >= 2
+          ? solicitanteApi.search(query)
+          : solicitanteApi.list({ is_active: true })
+
+        request
+          .then((response) => setSolicitantes(response.data.results || response.data || []))
+          .finally(() => setLoading(false))
+      } else {
+        setSolicitantes([])
+        setLoading(false)
+      }
+    }, 250)
+
+    return () => clearTimeout(t)
+  }, [query, showList, currentValue, manualSearchTick])
 
   useEffect(() => {
-    if (showList && query.length >= 1) {
-      solicitanteApi.search(query).then((r) => setSolicitantes(r.data || []))
-    } else {
-      setSolicitantes([])
-    }
-  }, [query, showList])
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+    function handleClick(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
         setShowList(false)
       }
     }
+
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const handleSelect = (sol) => {
-    onChange(sol)
-    setQuery(sol.full_name || sol.name)
+  const handleSelect = (solicitante) => {
+    onChange(solicitante)
+    setQuery(solicitante.full_name || solicitante.name || '')
     setShowList(false)
   }
 
-  const handleCreate = async () => {
-    if (!form.name.trim()) {
-      toast.error('El nombre es obligatorio')
-      return
-    }
-    setSaving(true)
-    try {
-      const payload = { ...form }
-      if (!payload.unit) delete payload.unit
-      const { data } = await solicitanteApi.create(payload)
-      toast.success('Solicitante creado')
-      setShowModal(false)
-      setForm({ name: '', rank: '', unit: '', agent_id: '', notes: '' })
-      handleSelect(data)
-    } catch (err) {
-      const msg = err.response?.data?.detail || 'Error al crear el solicitante'
-      toast.error(typeof msg === 'string' ? msg : JSON.stringify(msg))
-    } finally {
-      setSaving(false)
-    }
+  const handleClear = () => {
+    onChange(null)
+    setQuery('')
+    setSolicitantes([])
+    setShowList(false)
+  }
+
+  const handleSearchClick = () => {
+    if (disabled) return
+    setShowList(true)
+    setManualSearchTick((prev) => prev + 1)
+  }
+
+  const displayUnit = (solicitante) => {
+    if (solicitante.unit_name) return solicitante.unit_name
+    if (solicitante.unit && typeof solicitante.unit === 'object') return solicitante.unit.name || 'Sin unidad'
+    if (solicitante.unit) return String(solicitante.unit)
+    return 'Sin unidad'
   }
 
   return (
     <div ref={wrapperRef} className="relative">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setShowList(true)
-              if (!e.target.value) onChange(null)
-            }}
-            onFocus={() => setShowList(true)}
-            disabled={disabled}
-            placeholder="Buscar solicitante por nombre o rango..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-700 focus:outline-none focus:ring-brand-700"
-          />
-          {showList && solicitantes.length > 0 && (
-            <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
-              {solicitantes.map((s) => (
-                <li
-                  key={s.id}
-                  onClick={() => handleSelect(s)}
-                  className="cursor-pointer px-3 py-2 text-sm hover:bg-brand-50"
-                >
-                  <span className="font-medium">{s.rank ? `${s.rank} ` : ''}{s.name}</span>
-                  {s.unit && <span className="ml-2 text-xs text-gray-500">— {typeof s.unit === 'object' ? s.unit.name : s.unit}</span>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          disabled={disabled}
-          className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          <PlusIcon className="h-4 w-4" />
-          Nuevo
-        </button>
-      </div>
+      {currentValue ? (
+        <div className="rounded-md border border-gray-300 bg-gray-50 p-3">
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-medium text-gray-900">{currentValue.full_name || currentValue.name}</p>
+              <p className="text-xs text-gray-500">{displayUnit(currentValue)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={disabled}
+              className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Nuevo solicitante</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <XMarkIcon className="h-5 w-5" />
-              </button>
+          <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+            <div>
+              <span className="font-medium text-gray-700">Rango:</span> {currentValue.rank || 'No indicado'}
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Nombre *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Ej: Juan Pérez"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Rango / Grado</label>
-                <input
-                  type="text"
-                  value={form.rank}
-                  onChange={(e) => setForm({ ...form, rank: e.target.value })}
-                  placeholder="Ej: Capitán de Navío"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Unidad / Base</label>
-                <select
-                  value={form.unit}
-                  onChange={(e) => setForm({ ...form, unit: e.target.value || '' })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">— Sin unidad —</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.breadcrumb || loc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Cédula / ID</label>
-                <input
-                  type="text"
-                  value={form.agent_id}
-                  onChange={(e) => setForm({ ...form, agent_id: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Notas</label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  rows={2}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
+            <div>
+              <span className="font-medium text-gray-700">Cédula / ID:</span> {currentValue.agent_id || 'No indicado'}
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setShowModal(false)}
-                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            <div className="sm:col-span-2">
+              <span className="font-medium text-gray-700">Estado:</span>{' '}
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${currentValue.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={saving}
-                className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50"
-              >
-                {saving ? 'Guardando...' : 'Crear'}
-              </button>
+                {currentValue.is_active ? 'Activo' : 'Inactivo'}
+              </span>
             </div>
+            {currentValue.notes ? (
+              <div className="sm:col-span-2 text-gray-500">
+                <span className="font-medium text-gray-700">Notas:</span> {currentValue.notes}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setShowList(true)
+                if (!event.target.value) onChange(null)
+              }}
+              onFocus={() => setShowList(true)}
+              disabled={disabled}
+              placeholder="Buscar solicitante por nombre, rango, cédula o unidad..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 pl-9 pr-10 text-sm focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+            />
+            <button
+              type="button"
+              onClick={handleSearchClick}
+              disabled={disabled}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+              title="Buscar solicitantes"
+            >
+              <MagnifyingGlassIcon className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
+
+      {!currentValue && showList && (query.length >= 2 || manualSearchTick > 0 || loading) && (
+        <ul className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+          {loading && <li className="px-3 py-2 text-sm text-gray-500">Buscando...</li>}
+          {!loading && solicitantes.length === 0 && (
+            <li className="px-3 py-2 text-sm text-gray-500">No se encontraron solicitantes.</li>
+          )}
+          {solicitantes.map((solicitante) => (
+            <li
+              key={solicitante.id}
+              onClick={() => handleSelect(solicitante)}
+              className="cursor-pointer border-b border-gray-100 px-3 py-2 text-sm last:border-b-0 hover:bg-brand-50"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-gray-900">
+                    {solicitante.full_name || `${solicitante.rank ? `${solicitante.rank} ` : ''}${solicitante.name}`}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {displayUnit(solicitante)}
+                    {solicitante.agent_id ? ` · ${solicitante.agent_id}` : ''}
+                  </p>
+                  {solicitante.notes ? <p className="mt-0.5 line-clamp-1 text-xs text-gray-500">{solicitante.notes}</p> : null}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span
+                    className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${solicitante.is_active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                  >
+                    {solicitante.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                  <span className="text-[10px] text-gray-400">Seleccionar</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
     </div>
   )
 }
