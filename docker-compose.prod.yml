@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: inventario_backend_prod
     restart: unless-stopped
-    command: ["/app/entrypoint.sh"]
+    command: ["sh", "/app/entrypoint.sh"]
     environment:
       DEBUG: ${DEBUG:-False}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}

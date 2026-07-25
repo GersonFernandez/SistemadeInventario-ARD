@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile
     container_name: inventario_backend
     restart: unless-stopped
-    command: ["/app/entrypoint.sh"]
+    command: ["sh", "/app/entrypoint.sh"]
     environment:
       DEBUG: "${DEBUG:-True}"
       SECRET_KEY: "${SECRET_KEY:-dev-secret-key-change-me}"
