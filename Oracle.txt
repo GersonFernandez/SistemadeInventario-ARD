@@ -1,0 +1,76 @@
+Objetivo
+Dejar tu sistema en línea en una VM gratuita de Oracle, con backend, frontend y base de datos en contenedores.
+
+1. Crear VM gratis en Oracle
+
+Regístrate en Oracle Cloud Free Tier.
+Crea una instancia Compute:
+Imagen: Ubuntu 22.04.
+Shape recomendado: Ampere A1 (gratis, buen rendimiento).
+CPU/RAM ejemplo: 2 OCPU y 12 GB RAM (si te deja).
+Activa IP pública.
+Descarga la llave SSH.
+2. Abrir puertos en Oracle
+En la VCN de la instancia, agrega reglas de entrada:
+
+TCP 22 (SSH)
+TCP 80 (HTTP)
+TCP 443 (HTTPS)
+3. Entrar por SSH
+Desde tu PC:
+
+ssh -i RUTA_DE_TU_LLAVE opc@IP_PUBLICA_DE_TU_VM
+
+4. Instalar Docker y Compose en la VM
+Ejecuta:
+
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y docker.io docker-compose-plugin git
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo usermod -aG docker $USER
+
+Luego cierra sesión y vuelve a entrar por SSH para aplicar grupo docker.
+
+5. Subir tu proyecto
+Opción A (recomendada): subirlo a GitHub y clonar en la VM:
+
+git clone URL_DE_TU_REPO
+cd NOMBRE_DEL_REPO
+
+Opción B: copiar archivos desde tu PC con scp/rsync.
+
+6. Configurar variables de entorno
+Crea/edita el archivo de entorno de producción con:
+
+SECRET_KEY fuerte
+DEBUG=False
+ALLOWED_HOSTS con tu dominio o IP
+DATABASE_URL (si tu compose la usa)
+Variables VITE_ para frontend si aplica
+7. Levantar contenedores
+Dentro del proyecto:
+
+docker compose -f docker-compose.prod.yml up -d --build
+
+Verifica:
+
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f
+
+8. Probar acceso
+
+Abre en navegador: http://IP_PUBLICA
+Si carga frontend y API responde, ya está publicado.
+9. HTTPS gratis (opcional pero recomendado)
+Para SSL necesitas dominio. Gratis puedes usar:
+
+DuckDNS (subdominio gratis)
+Cloudflare (DNS gratis)
+Luego instalas certbot y emites certificado para tu dominio. Si quieres, te doy los comandos exactos según cómo tengas Nginx en tu contenedor.
+
+Si quieres, en el próximo mensaje te doy una versión exacta para tu repo con:
+
+variables listas para copiar,
+comando único de despliegue,
+checklist de verificación final para la entrega universitaria.
