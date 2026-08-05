@@ -129,6 +129,10 @@ git reset --hard origin/develop_ger_version_v2
 docker compose --env-file .env.prod -f docker-compose.prod.yml down
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 docker compose --env-file .env.prod -f docker-compose.prod.yml up
+docker compose --env-file .env.prod  -f docker-compose.prod.yml up -d --build
 docker compose up -d --build --wait
 py manage.py seed_realistic_data --force
 docker exec inventario_backend python manage.py seed_realistic_data --force
+docker exec inventario_backend_prod python manage.py seed_realistic_data --force
+admin@armada.mil.do
+Admin12345!

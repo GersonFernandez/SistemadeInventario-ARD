@@ -56,13 +56,9 @@ export default function LoginPage() {
             Sistema de gestión de inventario, órdenes de servicio y trazabilidad operativa
             para el taller de electrónica de la flota.
           </p>
-          <div className="mt-10 flex justify-center gap-6 text-xs text-brand-300">
-            <span>Acceso seguro con JWT</span>
-            <span>·</span>
-            <span>Sesión de 15 minutos</span>
-            <span>·</span>
-            <span>Control por rol</span>
-          </div>
+          <p className="mt-6 text-sm text-brand-300">
+              Sistema de uso exclusivo del personal autorizado de la Armada de República Dominicana.
+            </p>
         </div>
       </div>
 
