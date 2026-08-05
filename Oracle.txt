@@ -114,3 +114,21 @@ DEFAULT_ADMIN_PASSWORD=CAMBIA_ESTA_PASSWORD_ADMIN
 GUNICORN_WORKERS=4
 FRONTEND_PORT=80
 VITE_API_URL=/api/v1
+
+
+/////
+
+
+ ssh -i /c/Projecto/SistemadeInventario-ARD/ssh-key-2026-07-25.key ubuntu@163.192.120.229
+cd SistemadeInventario-ARD/
+
+git fetch origin
+git reset --hard origin/nombre-del-branch
+git reset --hard origin/develop_ger_version_v2
+
+docker compose --env-file .env.prod -f docker-compose.prod.yml down
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+docker compose --env-file .env.prod -f docker-compose.prod.yml up
+docker compose up -d --build --wait
+py manage.py seed_realistic_data --force
+docker exec inventario_backend python manage.py seed_realistic_data --force
