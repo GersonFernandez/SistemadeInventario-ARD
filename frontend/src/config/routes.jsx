@@ -7,8 +7,6 @@ import CategoriesPage from '../pages/CategoriesPage'
 import LocationsPage from '../pages/LocationsPage'
 import CatalogsPage from '../pages/CatalogsPage'
 import ProductCatalogsPage from '../pages/ProductCatalogsPage'
-import RepairsPage from '../pages/RepairsPage'
-import InstallationsPage from '../pages/InstallationsPage'
 import ReceptionPage from '../pages/ReceptionPage'
 import ItemDetailPage from '../pages/ItemDetailPage'
 import ItemFormPage from '../pages/ItemFormPage'
@@ -30,7 +28,6 @@ const appRoutes = [
   { path: '/', element: <AccessHubPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
   { path: '/products', element: <ProductsPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
   { path: '/inventory', element: <InventoryPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
-  { path: '/products/new', element: <ItemFormPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/products/:id', element: <ItemDetailPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
   { path: '/products/:id/edit', element: <ItemFormPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/products/:id/print-label', element: <PrintLabelPage />, allowedRoles: ['admin', 'almacenista'] },
@@ -38,16 +35,11 @@ const appRoutes = [
   { path: '/locations', element: <LocationsPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/catalogs', element: <CatalogsPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/product-catalogs', element: <ProductCatalogsPage />, allowedRoles: ['admin', 'almacenista'] },
-  { path: '/repairs', element: <RepairsPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
-  { path: '/installations', element: <InstallationsPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
   { path: '/reception', element: <ReceptionPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/reception/new', element: <ReceptionFormPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/despachos', element: <DespachosPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/despachos/new', element: <DespachoFormPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/despachos/:id', element: <DespachoDetailPage />, allowedRoles: ['admin', 'almacenista'] },
-  { path: '/workorders', element: <Navigate to="/despachos" replace />, publicRoute: true },
-  { path: '/workorders/new', element: <Navigate to="/despachos/new" replace />, publicRoute: true },
-  { path: '/workorders/:id', element: <DespachoDetailPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/service-orders', element: <ServiceOrdersPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
   { path: '/service-orders/new', element: <ServiceOrderFormPage />, allowedRoles: ['admin', 'almacenista'] },
   { path: '/service-orders/:id', element: <ServiceOrderDetailPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },

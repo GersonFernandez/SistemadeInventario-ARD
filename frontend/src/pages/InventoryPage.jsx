@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
@@ -11,7 +11,6 @@ import {
   ArrowPathIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  PlusIcon,
 } from '@heroicons/react/24/outline'
 import { inventoryApi, getMediaUrl } from '../services/inventoryApi'
 import { downloadBlob } from '../utils/download'
@@ -163,15 +162,6 @@ export default function InventoryPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canEdit && (
-              <Link
-                to="/products/new"
-                className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/20"
-              >
-                <PlusIcon className="h-4 w-4" />
-                Nuevo artículo
-              </Link>
-            )}
             <div className="relative" data-report-menu>
               <button
                 onClick={() => setShowReportMenu((s) => !s)}
