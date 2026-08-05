@@ -1,95 +1,98 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import {
-  HomeIcon,
-  CubeIcon,
-  ClipboardDocumentListIcon,
-  WrenchScrewdriverIcon,
-  ArrowUpTrayIcon,
-  CircleStackIcon,
-  MapPinIcon,
-  TagIcon,
-  UsersIcon,
-  InboxArrowDownIcon,
-  ArrowRightOnRectangleIcon,
-} from '@heroicons/react/24/outline'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
 import { useAuth } from '../context/AuthContext'
 import SessionTimeout from './SessionTimeout'
+import { getVisibleNavigationItems, navigationItems } from '../config/navigation'
 
-const navigation = [
-  { name: 'Inicio', href: '/', icon: HomeIcon },
-  { name: 'Productos', href: '/products', icon: CubeIcon },
-  { name: 'Órdenes de servicio', href: '/service-orders', icon: ClipboardDocumentListIcon },
-  { name: 'Reparaciones', href: '/repairs', icon: WrenchScrewdriverIcon },
-  { name: 'Instalaciones', href: '/installations', icon: ArrowUpTrayIcon },
-  { name: 'Recepción de mercancías', href: '/reception', icon: InboxArrowDownIcon },
-  { name: 'Despacho de mercancías', href: '/despachos', icon: ClipboardDocumentListIcon },
-  { name: 'Solicitantes', href: '/solicitantes', icon: UsersIcon },
-  { name: 'Catálogos', href: '/product-catalogs', icon: CircleStackIcon },
-  { name: 'Ubicaciones', href: '/locations', icon: MapPinIcon },
-  { name: 'Categorías', href: '/categories', icon: TagIcon },
-  { name: 'Usuarios', href: '/users', icon: UsersIcon, adminOnly: true },
-]
+const roleLabels = {
+  admin: 'Administrador',
+  almacenista: 'Encargado de Inventario',
+  tecnico: 'Técnico Especialista',
+}
+
+function usePageTitle(pathname) {
+  // find the best matching nav item for the current path
+  const sorted = [...navigationItems].sort((a, b) => b.path.length - a.path.length)
+  const match = sorted.find((item) => pathname === item.path || pathname.startsWith(item.path + '/'))
+  return match?.label ?? 'Sistema de Inventario'
+}
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleLogout = async () => {
     await logout()
     navigate('/login')
   }
 
-  const isAdmin = user?.role === 'admin'
+  const visibleNavigation = getVisibleNavigationItems(user)
+  const pageTitle = usePageTitle(location.pathname)
+
   return (
     <div className="min-h-screen flex">
       <SessionTimeout />
-      <aside className="w-64 bg-brand-900 text-white flex flex-col">
-        <div className="p-6 border-b border-brand-800">
-          <h1 className="text-lg font-bold">Taller Electrónica</h1>
-          <p className="text-xs text-gray-400">Armada RD</p>
+
+      {/* ── Sidebar ── */}
+      <aside className="w-64 bg-brand-900 text-white flex flex-col flex-shrink-0">
+        {/* Brand */}
+        <div className="px-5 py-5 border-b border-brand-800">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-700 text-xs font-bold text-white">ARD</div>
+            <div>
+              <p className="text-sm font-bold leading-tight">Taller Electrónica</p>
+              <p className="text-[11px] text-brand-300 leading-tight">Armada de República Dominicana</p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navigation.map((item) => {
-            if (item.adminOnly && !isAdmin) return null
+        {/* Nav links */}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {visibleNavigation.map((item) => {
             const Icon = item.icon
+            const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'))
             return (
               <Link
-                key={item.name}
-                to={item.href}
-                className="flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium hover:bg-brand-800 transition-colors"
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-brand-700 text-white shadow-sm'
+                    : 'text-brand-100 hover:bg-brand-800 hover:text-white'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className="h-5 w-5" />
-                  {item.name}
-                </div>
+                <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-white' : 'text-brand-300'}`} />
+                {item.label}
               </Link>
             )
           })}
         </nav>
 
-        <div className="p-4 border-t border-brand-800">
-          <div className="mb-3 text-sm">
-            <p className="font-medium">{user?.name}</p>
-            <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
+        {/* User footer */}
+        <div className="px-3 py-4 border-t border-brand-800">
+          <div className="mb-3 px-3">
+            <p className="text-sm font-semibold text-white leading-tight">{user?.name}</p>
+            <p className="text-xs text-brand-300 mt-0.5">{roleLabels[user?.role] ?? user?.role}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-brand-800 transition-colors"
+            className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-brand-200 hover:bg-brand-800 hover:text-white transition-colors"
           >
-            <ArrowRightOnRectangleIcon className="h-5 w-5" />
+            <ArrowRightOnRectangleIcon className="h-4 w-4" />
             Cerrar sesión
           </button>
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col">
-        <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
-          <div className="text-sm font-medium text-gray-700">Módulo de acceso y usuarios</div>
-          <div className="text-sm text-gray-600">
+      {/* ── Content ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
+          <p className="text-sm font-semibold text-gray-800">{pageTitle}</p>
+          <time className="text-xs text-gray-500">
             {new Date().toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </div>
+          </time>
         </header>
         <main className="flex-1 p-8 bg-gray-50 overflow-auto">
           {children}

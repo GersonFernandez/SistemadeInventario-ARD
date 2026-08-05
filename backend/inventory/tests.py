@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
-from .models import Category, Item, StockMovement, Location, LocationType, Transfer, ItemUnit, ItemLoan
+from .models import Category, Item, StockMovement, Location, LocationType, Transfer, ItemUnit, ItemLoan, UnitMeasure
 from django.utils import timezone
 from datetime import timedelta
 
@@ -160,6 +160,11 @@ class InventoryAPITest(APITestCase):
         response = self.client.get('/api/v1/inventory/items/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_list_products_endpoint_returns_items(self):
+        self.client.force_authenticate(user=self.almacenista)
+        response = self.client.get('/api/v1/products/items/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
     def test_create_item_requires_almacenista(self):
         self.client.force_authenticate(user=self.tecnico)
         response = self.client.post('/api/v1/inventory/items/', {
@@ -179,6 +184,52 @@ class InventoryAPITest(APITestCase):
             'minimum_stock': 0,
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_list_unit_measures(self):
+        UnitMeasure.objects.create(code='und', name='Unidad')
+        self.client.force_authenticate(user=self.tecnico)
+        response = self.client.get('/api/v1/inventory/unit-measures/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+
+    def test_list_products_unit_measures_includes_inactive_records(self):
+        self.client.force_authenticate(user=self.almacenista)
+        unit = UnitMeasure.objects.create(code='jgo', name='Juego', is_active=False)
+
+        response = self.client.get('/api/v1/products/unit-measures/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [item['id'] for item in response.data.get('results', response.data)]
+        self.assertIn(unit.id, ids)
+
+    def test_delete_unit_measure_soft_deletes_and_keeps_in_list(self):
+        self.client.force_authenticate(user=self.almacenista)
+        unit = UnitMeasure.objects.create(code='del', name='Delete', is_active=True)
+
+        response = self.client.delete(f'/api/v1/products/unit-measures/{unit.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        unit.refresh_from_db()
+        self.assertFalse(unit.is_active)
+
+        list_response = self.client.get('/api/v1/products/unit-measures/')
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        ids = [item['id'] for item in list_response.data.get('results', list_response.data)]
+        self.assertIn(unit.id, ids)
+
+    def test_delete_item_soft_deletes_and_keeps_in_list(self):
+        self.client.force_authenticate(user=self.almacenista)
+
+        response = self.client.delete(f'/api/v1/inventory/items/{self.item.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.is_active)
+
+        list_response = self.client.get('/api/v1/inventory/items/')
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        ids = [item['id'] for item in list_response.data.get('results', list_response.data)]
+        self.assertIn(self.item.id, ids)
 
     def test_stock_entry_increases_quantity(self):
         self.client.force_authenticate(user=self.almacenista)

@@ -59,6 +59,24 @@ export default function UserFormPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    // ── Frontend validation ──
+    const errs = {}
+    if (!formData.name.trim())  errs.name  = 'El nombre completo es obligatorio'
+    if (!formData.email.trim()) errs.email = 'El correo es obligatorio'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = 'Formato de correo inválido'
+    if (!formData.role)         errs.role  = 'Seleccione un rol'
+    if (!isEditing && !formData.password)         errs.password = 'La contraseña es obligatoria para nuevos usuarios'
+    if (!isEditing && formData.password && formData.password.length < 8) errs.password = 'La contraseña debe tener al menos 8 caracteres'
+    if (isEditing && formData.password && formData.password.length < 8) errs.password = 'Si deseas cambiar la contraseña, debe tener al menos 8 caracteres'
+
+    if (Object.keys(errs).length) {
+      toast.error('Corrija los campos marcados antes de continuar')
+      // surface each error as a toast so they're visible even without inline errors
+      Object.values(errs).forEach((msg) => toast.error(msg, { duration: 4000 }))
+      return
+    }
+
     try {
       const payload = { ...formData }
       if (!payload.password && isEditing) {

@@ -604,3 +604,54 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             filename=f"cierre_{service_order.service_number}.{extension}",
             content_type=content_type,
         )
+
+    @action(detail=False, methods=['get'])
+    def report(self, request):
+        fmt = request.query_params.get('type', 'pdf')
+        if fmt not in ('pdf', 'excel'):
+            return Response({'detail': 'Formato inválido. Use pdf o excel.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = self.get_queryset()
+
+        # optional filters
+        service_type = request.query_params.get('service_type')
+        order_status = request.query_params.get('status')
+        date_from = request.query_params.get('from')
+        date_to = request.query_params.get('to')
+
+        if service_type:
+            qs = qs.filter(service_type=service_type)
+        if order_status:
+            qs = qs.filter(status=order_status)
+        if date_from:
+            qs = qs.filter(received_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(received_at__date__lte=date_to)
+
+        headers = ['Número', 'Tipo', 'Estado', 'Técnico', 'Equipos', 'Recibida', 'Cerrada', 'Unidad']
+        rows = []
+        for so in qs.select_related('assigned_technician', 'unit').prefetch_related('items'):
+            equip = ', '.join(
+                f"{li.item_name_snapshot or '?'} ({li.serial_number or 'sin serial'})"
+                for li in so.items.all()
+            ) or (f"{so.equipment_name_snapshot} ({so.equipment_serial_number or 'sin serial'})")
+            rows.append([
+                so.service_number,
+                so.get_service_type_display(),
+                so.get_status_display(),
+                so.assigned_technician.name if so.assigned_technician else '—',
+                equip,
+                so.received_at.strftime('%d/%m/%Y') if so.received_at else '—',
+                so.completed_at.strftime('%d/%m/%Y') if so.completed_at else '—',
+                so.unit.name if so.unit else '—',
+            ])
+
+        buffer = build_report('Órdenes de Servicio', headers, rows, fmt)
+        content_type = 'application/pdf' if fmt == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        extension = 'pdf' if fmt == 'pdf' else 'xlsx'
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f"ordenes_servicio_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{extension}",
+            content_type=content_type,
+        )

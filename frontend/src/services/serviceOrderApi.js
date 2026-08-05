@@ -17,4 +17,9 @@ export const serviceOrderApi = {
     api.get(`/work-orders/service-orders/${id}/completion_receipt/?type=${format}`, {
       responseType: 'blob',
     }),
+  downloadReport: (format = 'pdf', params = {}) =>
+    api.get('/work-orders/service-orders/report/', {
+      params: { type: format, ...params },
+      responseType: 'blob',
+    }),
 }

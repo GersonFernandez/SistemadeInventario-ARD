@@ -313,6 +313,64 @@ class SolicitanteAPITest(TestCase):
         self.assertEqual(Solicitante.objects.count(), 1)
 
 
+class ServiceOrderCreateAPITest(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email='create.srv@armada.mil.do',
+            password='Admin12345',
+            name='Admin SRV Create',
+            role='admin',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+        self.cat, _ = Category.objects.get_or_create(
+            name='Equipos',
+            defaults={'abbreviation': 'EQP'},
+        )
+        self.location, _ = Location.objects.get_or_create(
+            codigo='SRV-CRT',
+            defaults={'name': 'Taller Servicio Create', 'location_type': get_or_create_location_type()},
+        )
+        self.item, _ = Item.objects.get_or_create(
+            code='EQP-101',
+            defaults={
+                'name': 'Radio VHF Marino',
+                'category': self.cat,
+                'location': self.location,
+                'quantity': 5,
+                'minimum_stock': 1,
+                'is_base_product': True,
+                'is_active': True,
+            },
+        )
+
+    def test_create_service_order_from_write_items_payload(self):
+        response = self.client.post('/api/v1/work-orders/service-orders/', {
+            'service_type': 'reparacion',
+            'assigned_technician': None,
+            'unit': None,
+            'recipient_first_name': '',
+            'recipient_last_name': '',
+            'recipient_id_card': '',
+            'recipient_rank_position': '',
+            'notes': 'Prueba de creación',
+            'write_items': [{
+                'item': self.item.id,
+                'serial_number': 'SRV-ABC-123',
+                'description': 'Equipo principal',
+                'equipment_condition': 'usado',
+            }],
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201, response.json())
+        data = response.json()
+        self.assertEqual(data['service_type'], 'reparacion')
+        self.assertEqual(ServiceOrder.objects.count(), 1)
+        self.assertEqual(ServiceOrderItem.objects.count(), 1)
+        self.assertEqual(ServiceOrder.objects.get(pk=data['id']).equipment_id, self.item.id)
+
+
 class ServiceOrderReceiptAPITest(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(

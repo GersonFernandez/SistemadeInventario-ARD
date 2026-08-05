@@ -34,3 +34,11 @@ Solo backend (dev), util cuando cambias Django
 cd /c/Projecto/SistemadeInventario-ARD
 docker compose up -d --build --no-deps backend
 docker compose ps
+
+orcale
+
+
+docker compose --env-file .env.prod -f docker-compose.prod.yml down
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+docker logs --tail 200 inventario_backend_prod

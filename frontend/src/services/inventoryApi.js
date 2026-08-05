@@ -29,6 +29,8 @@ export const inventoryApi = {
   updateProductState: (id, data) => api.put(`/inventory/product-states/${id}/`, data),
   deleteProductState: (id) => api.delete(`/inventory/product-states/${id}/`),
 
+  getUnitMeasures: (params = {}) => api.get('/inventory/unit-measures/', { params }),
+
   getLocationTypes: (params = {}) => api.get('/inventory/location-types/', { params }),
   getLocationType: (id) => api.get(`/inventory/location-types/${id}/`),
   createLocationType: (data) => api.post('/inventory/location-types/', data),

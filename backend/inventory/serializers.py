@@ -5,6 +5,7 @@ from .models import (
     Brand,
     ProductModel,
     ProductState,
+    UnitMeasure,
     Location,
     LocationType,
     Item,
@@ -47,6 +48,19 @@ class ProductStateSerializer(serializers.ModelSerializer):
         model = ProductState
         fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class UnitMeasureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UnitMeasure
+        fields = ['id', 'code', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class UnitMeasureSimpleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UnitMeasure
+        fields = ['id', 'code', 'name']
 
 
 class LocationTypeSerializer(serializers.ModelSerializer):
@@ -210,8 +224,9 @@ class ItemListSerializer(serializers.ModelSerializer):
     stock_loaned = serializers.IntegerField(read_only=True)
     stock_asignado = serializers.IntegerField(read_only=True)
     brand_name = serializers.CharField(source='brand.name', read_only=True)
-    product_model_name = serializers.CharField(source='product_model.name', read_only=True)
-    state_name = serializers.CharField(source='state.name', read_only=True)
+    product_model_name = serializers.CharField(source='product_model.name', read_only=True, default=None)
+    state_name = serializers.CharField(source='state.name', read_only=True, default=None)
+    unit_name = serializers.SerializerMethodField()
     units_count = serializers.SerializerMethodField()
     availability_state = serializers.SerializerMethodField()
     availability_state_display = serializers.SerializerMethodField()
@@ -221,9 +236,10 @@ class ItemListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'code', 'sku', 'part_number', 'marca', 'modelo', 'numero_serie',
             'brand', 'brand_name', 'product_model', 'product_model_name', 'state', 'state_name',
+            'unit', 'unit_name',
             'category', 'category_name', 'application', 'location', 'location_display',
             'kind', 'kind_display', 'track_by_serial',
-            'quantity', 'minimum_stock', 'unit', 'stock_available', 'stock_loaned', 'stock_asignado',
+            'quantity', 'minimum_stock', 'stock_available', 'stock_loaned', 'stock_asignado',
             'availability_state', 'availability_state_display',
             'units_count',
             'image_url', 'is_active', 'is_critical', 'barcode_value',
@@ -256,6 +272,9 @@ class ItemListSerializer(serializers.ModelSerializer):
     def get_barcode_value(self, obj):
         return obj.code or f"ITEM-{obj.id:06d}"
 
+    def get_unit_name(self, obj):
+        return obj.unit.name if obj.unit else None
+
     def get_units_count(self, obj):
         if not obj.track_by_serial:
             return 0
@@ -276,6 +295,7 @@ class ItemDetailSerializer(serializers.ModelSerializer):
     brand_name = serializers.CharField(source='brand.name', read_only=True)
     product_model_name = serializers.CharField(source='product_model.name', read_only=True)
     state_name = serializers.CharField(source='state.name', read_only=True)
+    unit_name = serializers.CharField(source='unit.name', read_only=True, default=None)
     units = ItemUnitSerializer(many=True, read_only=True)
 
     class Meta:
@@ -286,7 +306,7 @@ class ItemDetailSerializer(serializers.ModelSerializer):
             'category', 'category_name', 'description', 'application',
             'location', 'location_display', 'location_breadcrumb',
             'kind', 'kind_display', 'track_by_serial',
-            'quantity', 'minimum_stock', 'unit', 'stock_available', 'stock_loaned', 'stock_asignado',
+            'quantity', 'minimum_stock', 'unit', 'unit_name', 'stock_available', 'stock_loaned', 'stock_asignado',
             'units',
             'image', 'image_url',
             'is_active', 'is_critical', 'barcode_value',

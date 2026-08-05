@@ -2,12 +2,13 @@ from django.db.models import Q
 from rest_framework import viewsets, permissions
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Category, Brand, ProductModel, ProductState, Location, Item
+from .models import Category, Brand, ProductModel, ProductState, Location, Item, UnitMeasure
 from .serializers import (
     CategorySerializer,
     BrandSerializer,
     ProductModelSerializer,
     ProductStateSerializer,
+    UnitMeasureSerializer,
     LocationSimpleSerializer,
     ItemListSerializer,
     ItemDetailSerializer,
@@ -28,6 +29,10 @@ class ProductBrandViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return queryset.order_by('-is_active', 'name')
+
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active', 'updated_at'])
@@ -40,6 +45,10 @@ class ProductModelViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active', 'brand']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return queryset.order_by('-is_active', 'name')
+
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active', 'updated_at'])
@@ -51,6 +60,26 @@ class ProductStateViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return queryset.order_by('-is_active', 'name')
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class ProductUnitMeasureViewSet(viewsets.ModelViewSet):
+    queryset = UnitMeasure.objects.all()
+    serializer_class = UnitMeasureSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return queryset.order_by('-is_active', 'name')
 
     def perform_destroy(self, instance):
         instance.is_active = False

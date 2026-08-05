@@ -1,37 +1,39 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 
-const WARNING_TIME = 60 * 1000 // 1 minute warning
+const WARNING_BEFORE_MS = 60 * 1000 // show warning 1 minute before logout
+const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
 
 export default function SessionTimeout() {
   const { logout, isAuthenticated } = useAuth()
   const [showWarning, setShowWarning] = useState(false)
   const timeoutRef = useRef(null)
   const warningRef = useRef(null)
+  // keep a stable ref to latest logout so the timeout callback never goes stale
+  const logoutRef = useRef(logout)
+  useEffect(() => { logoutRef.current = logout }, [logout])
 
-  const getSessionTimeoutMs = () => {
+  const getTimeoutMs = () => {
     const minutes = Number(localStorage.getItem('sessionTimeoutMinutes') || 15)
     return Math.max(5, minutes) * 60 * 1000
   }
 
-  const resetTimer = () => {
+  const resetTimer = useCallback(() => {
     if (!isAuthenticated) return
-    const sessionTimeout = getSessionTimeoutMs()
-
     clearTimeout(timeoutRef.current)
     clearTimeout(warningRef.current)
     setShowWarning(false)
 
-    warningRef.current = setTimeout(() => {
-      setShowWarning(true)
-    }, Math.max(sessionTimeout - WARNING_TIME, 1000))
+    const total = getTimeoutMs()
+    const warnAt = Math.max(total - WARNING_BEFORE_MS, 1000)
 
+    warningRef.current = setTimeout(() => setShowWarning(true), warnAt)
     timeoutRef.current = setTimeout(() => {
-      logout()
-      toast.error('Su sesión ha expirado por inactividad')
-    }, sessionTimeout)
-  }
+      logoutRef.current()
+      toast.error('Su sesión ha expirado por inactividad.')
+    }, total)
+  }, [isAuthenticated])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -41,21 +43,15 @@ export default function SessionTimeout() {
       return
     }
 
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart']
-    events.forEach((event) => window.addEventListener(event, resetTimer))
-
+    ACTIVITY_EVENTS.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }))
     resetTimer()
 
     return () => {
-      events.forEach((event) => window.removeEventListener(event, resetTimer))
+      ACTIVITY_EVENTS.forEach((ev) => window.removeEventListener(ev, resetTimer))
       clearTimeout(timeoutRef.current)
       clearTimeout(warningRef.current)
     }
-  }, [isAuthenticated])
-
-  const handleStayLoggedIn = () => {
-    resetTimer()
-  }
+  }, [isAuthenticated, resetTimer])
 
   if (!showWarning) return null
 
@@ -68,16 +64,13 @@ export default function SessionTimeout() {
         </p>
         <div className="mt-4 flex justify-end gap-3">
           <button
-            onClick={() => {
-              setShowWarning(false)
-              logout()
-            }}
+            onClick={() => { setShowWarning(false); logoutRef.current() }}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Cerrar sesión
           </button>
           <button
-            onClick={handleStayLoggedIn}
+            onClick={resetTimer}
             className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900"
           >
             Continuar sesión

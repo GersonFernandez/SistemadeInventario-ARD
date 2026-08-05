@@ -73,6 +73,23 @@ class ProductState(models.Model):
         return self.name
 
 
+class UnitMeasure(models.Model):
+    code = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=80, unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'unidad de medida'
+        verbose_name_plural = 'unidades de medida'
+
+    def __str__(self):
+        return self.name
+
+
 class LocationType(models.Model):
     """Tipo de ubicación (taller, base naval, unidad naval, etc.).
 
@@ -227,7 +244,14 @@ class Item(DirtyFieldsMixin, models.Model):
     )
     quantity = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0)])
     minimum_stock = models.PositiveIntegerField(default=0)
-    unit = models.CharField(max_length=50, default='unidad')
+    unit = models.ForeignKey(
+        UnitMeasure,
+        on_delete=models.PROTECT,
+        related_name='items',
+        null=True,
+        blank=True,
+        help_text='Unidad de medida del producto',
+    )
     kind = models.CharField(
         max_length=20,
         choices=Kind.choices,

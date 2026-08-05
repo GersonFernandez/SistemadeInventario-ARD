@@ -290,6 +290,10 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
             'equipment_model_snapshot', 'equipment_description_snapshot',
             'created_by', 'received_at', 'created_at', 'updated_at',
         ]
+        extra_kwargs = {
+            'equipment': {'required': False},
+            'equipment_serial_number': {'required': False},
+        }
 
     def validate_assigned_technician(self, value):
         if value and value.role != 'tecnico':
@@ -316,8 +320,6 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
 
                 if not item_id:
                     raise serializers.ValidationError({'write_items': f'Línea {idx}: item es obligatorio.'})
-                if not serial:
-                    raise serializers.ValidationError({'write_items': f'Línea {idx}: serial_number es obligatorio.'})
                 if condition not in {choice[0] for choice in ServiceOrder.EquipmentCondition.choices}:
                     raise serializers.ValidationError({'write_items': f'Línea {idx}: equipment_condition inválido.'})
 
@@ -327,7 +329,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({'write_items': f'Línea {idx}: item no válido.'})
 
                 self.validate_equipment(item)
-                duplicate_key = (item.id, serial.lower())
+                duplicate_key = (item.id, serial.lower() if serial else '')
                 if duplicate_key in seen_keys:
                     raise serializers.ValidationError({
                         'write_items': f'Línea {idx}: no se permite repetir el mismo producto y serial en la orden.'
@@ -341,6 +343,9 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
                     'description': description,
                 })
 
+            if not normalized:
+                raise serializers.ValidationError({'write_items': 'Debe incluir al menos un producto.'})
+
             data['__normalized_items__'] = normalized
             first = normalized[0]
             data['equipment'] = first['item']
@@ -348,14 +353,12 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
             data['equipment_condition'] = first['equipment_condition']
             return data
 
-        serial = (data.get('equipment_serial_number') or '').strip()
-        if not serial:
-            raise serializers.ValidationError({'equipment_serial_number': 'El número de serial es obligatorio.'})
-        data['equipment_serial_number'] = serial
+        data['equipment_serial_number'] = (data.get('equipment_serial_number') or '').strip()
         return data
 
     def create(self, validated_data):
         normalized_items = validated_data.pop('__normalized_items__', None)
+        validated_data.pop('write_items', None)
         service_order = super().create(validated_data)
 
         if normalized_items:

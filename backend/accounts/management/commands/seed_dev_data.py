@@ -311,6 +311,13 @@ class Command(BaseCommand):
         return locations
 
     def _ensure_items(self, count, categories, locations):
+        from inventory.models import UnitMeasure
+        # Ensure a default unit measure exists for seed items
+        unit_obj, _ = UnitMeasure.objects.get_or_create(
+            code="und",
+            defaults={"name": "Unidad", "description": "Unidad de medida por defecto", "is_active": True},
+        )
+
         existing = Item.objects.filter(name__startswith="DEV-ITEM-").count()
         to_create = max(0, count - existing)
 
@@ -335,7 +342,7 @@ class Command(BaseCommand):
                     location=location,
                     quantity=200 if not is_tool else 0,
                     minimum_stock=10,
-                    unit="unidad",
+                    unit=unit_obj,
                     kind=kind,
                     track_by_serial=track,
                     is_active=True,

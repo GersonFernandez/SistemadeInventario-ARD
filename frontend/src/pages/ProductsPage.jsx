@@ -2,36 +2,40 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { productApi } from '../services/productApi'
+import { inventoryApi } from '../services/inventoryApi'
+import { downloadBlob } from '../utils/download'
+import { useAuth } from '../context/AuthContext'
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState([])
-  const [categories, setCategories] = useState([])
-  const [brands, setBrands] = useState([])
-  const [models, setModels] = useState([])
-  const [states, setStates] = useState([])
-  const [locations, setLocations] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const { user } = useAuth()
+  const canCreate = user?.role === 'admin' || user?.role === 'almacenista'
 
-  const [form, setForm] = useState({
-    name: '',
-    part_number: '',
-    numero_serie: '',
-    category: '',
-    brand: '',
-    product_model: '',
-    state: '',
-    description: '',
-    application: '',
-    location: '',
-    kind: 'consumible',
-    minimum_stock: 0,
-    unit: 'unidad',
-    is_active: true,
-    technical_specs: '',
-    datasheet_url: '',
-  })
+  // ── catalogs ──
+  const [categories, setCategories]   = useState([])
+  const [brands, setBrands]           = useState([])
+  const [allModels, setAllModels]     = useState([])
+  const [states, setStates]           = useState([])
+  const [unitMeasures, setUnitMeasures] = useState([])
+  const [locations, setLocations]     = useState([])
+
+  // ── products list ──
+  const [products, setProducts] = useState([])
+  const [loading, setLoading]   = useState(true)
+
+  // ── form ──
+  const [saving, setSaving]       = useState(false)
   const [imageFile, setImageFile] = useState(null)
+  const [form, setForm] = useState({
+    name: '', part_number: '', numero_serie: '', application: '',
+    category: '', brand: '', product_model: '', state: '',
+    location: '', kind: 'consumible', minimum_stock: 0, unit: '',
+    description: '', technical_specs: '', datasheet_url: '',
+    is_active: true,
+  })
+
+  const filteredModels = allModels.filter(
+    (m) => !form.brand || String(m.brand) === String(form.brand)
+  )
 
   useEffect(() => {
     loadAll()
@@ -40,29 +44,49 @@ export default function ProductsPage() {
   const loadAll = async () => {
     setLoading(true)
     try {
-      const [p, c, b, m, s, l] = await Promise.all([
-        productApi.getItems({ page_size: 100 }),
+      const [p, c, b, m, s, u, l] = await Promise.all([
+        productApi.getItems({ page_size: 200 }),
         productApi.getCategories(),
         productApi.getBrands({ is_active: true }),
         productApi.getProductModels({ is_active: true }),
         productApi.getProductStates({ is_active: true }),
-        productApi.getLocations(),
+        productApi.getUnitMeasures({ is_active: true }),
+        productApi.getLocations({ page_size: 200 }),
       ])
-      setProducts(p.data.results || p.data)
-      setCategories(c.data.results || c.data)
-      setBrands(b.data.results || b.data)
-      setModels(m.data.results || m.data)
-      setStates(s.data.results || s.data)
-      setLocations(l.data.results || l.data)
-    } catch (error) {
+      const norm = (r) => r.data.results ?? r.data
+      setProducts(norm(p))
+      setCategories(norm(c))
+      setBrands(norm(b))
+      setAllModels(norm(m))
+      setStates(norm(s))
+      setUnitMeasures(norm(u))
+      setLocations(norm(l))
+    } catch {
       toast.error('No se pudieron cargar los datos de productos')
-      console.error(error)
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredModels = models.filter((m) => form.brand && String(m.brand) === String(form.brand))
+  const set = (field) => (e) => {
+    const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value
+    setForm((prev) => ({
+      ...prev,
+      [field]: val,
+      ...(field === 'brand' ? { product_model: '' } : {}),
+    }))
+  }
+
+  const resetForm = () => {
+    setForm({
+      name: '', part_number: '', numero_serie: '', application: '',
+      category: '', brand: '', product_model: '', state: '',
+      location: '', kind: 'consumible', minimum_stock: 0, unit: '',
+      description: '', technical_specs: '', datasheet_url: '',
+      is_active: true,
+    })
+    setImageFile(null)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -70,62 +94,39 @@ export default function ProductsPage() {
       toast.error('Nombre y categoría son obligatorios')
       return
     }
+    if (!form.brand)         { toast.error('La marca es obligatoria'); return }
+    if (!form.product_model) { toast.error('El modelo es obligatorio'); return }
 
     setSaving(true)
     try {
       const payload = new FormData()
       payload.append('name', form.name)
       payload.append('part_number', form.part_number || '')
-      payload.append('numero_serie', form.numero_serie || '')
       payload.append('category', form.category)
-      if (form.brand) payload.append('brand', form.brand)
-      if (form.product_model) payload.append('product_model', form.product_model)
-      if (form.state) payload.append('state', form.state)
+      payload.append('brand', form.brand)
+      payload.append('product_model', form.product_model)
+      if (form.state)    payload.append('state', form.state)
       if (form.location) payload.append('location', form.location)
       payload.append('kind', form.kind)
       payload.append('track_by_serial', form.kind === 'herramienta' ? 'true' : 'false')
       payload.append('quantity', 0)
       payload.append('minimum_stock', Number(form.minimum_stock || 0))
-      payload.append('unit', form.unit || 'unidad')
+      if (form.unit) payload.append('unit', form.unit)
       payload.append('is_active', form.is_active)
 
       const finalDescription = [
         form.description?.trim(),
         form.technical_specs?.trim() ? `Especificaciones técnicas:\n${form.technical_specs.trim()}` : '',
         form.datasheet_url?.trim() ? `Ficha técnica: ${form.datasheet_url.trim()}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n\n')
+      ].filter(Boolean).join('\n\n')
 
       payload.append('description', finalDescription)
       payload.append('application', form.application || '')
-
-      if (imageFile) {
-        payload.append('image', imageFile)
-      }
+      if (imageFile) payload.append('image', imageFile)
 
       await productApi.createItem(payload)
       toast.success('Producto creado')
-
-      setForm({
-        name: '',
-        part_number: '',
-        numero_serie: '',
-        category: '',
-        brand: '',
-        product_model: '',
-        state: '',
-        description: '',
-        application: '',
-        location: '',
-        kind: 'consumible',
-        minimum_stock: 0,
-        unit: 'unidad',
-        is_active: true,
-        technical_specs: '',
-        datasheet_url: '',
-      })
-      setImageFile(null)
+      resetForm()
       loadAll()
     } catch (error) {
       const message =
@@ -138,6 +139,21 @@ export default function ProductsPage() {
     }
   }
 
+  const toggleProduct = async (id, isActive) => {
+    try {
+      if (isActive) {
+        await productApi.deleteItem(id)
+        toast.success('Producto deshabilitado')
+      } else {
+        await productApi.updateItem(id, { is_active: true })
+        toast.success('Producto habilitado')
+      }
+      loadAll()
+    } catch {
+      toast.error('No se pudo cambiar el estado del producto')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -147,113 +163,111 @@ export default function ProductsPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Crear producto</h3>
+      {/* ── Creation form ── */}
+      {canCreate && (
+        <form onSubmit={handleSubmit} className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm space-y-4">
+          <h3 className="text-lg font-semibold text-gray-900">Crear producto</h3>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Input label="Nombre del producto" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-          <Input label="Número de parte" value={form.part_number} onChange={(v) => setForm({ ...form, part_number: v })} />
-          <Input label="Número de serie" value={form.numero_serie} onChange={(v) => setForm({ ...form, numero_serie: v })} />
-          <Input label="Aplicación/uso" value={form.application} onChange={(v) => setForm({ ...form, application: v })} />
-
-          <Select
-            label="Categoría"
-            value={form.category}
-            onChange={(v) => setForm({ ...form, category: v })}
-            options={categories.map((c) => ({ value: c.id, label: c.name }))}
-            required
-          />
-          <Select
-            label="Marca (catálogo)"
-            value={form.brand}
-            onChange={(v) => setForm({ ...form, brand: v, product_model: '' })}
-            options={brands.map((b) => ({ value: b.id, label: b.name }))}
-            required
-          />
-          <Select
-            label="Modelo (catálogo)"
-            value={form.product_model}
-            onChange={(v) => setForm({ ...form, product_model: v })}
-            options={filteredModels.map((m) => ({ value: m.id, label: `${m.brand_name} - ${m.name}` }))}
-            required
-            disabled={!form.brand}
-          />
-          <Select
-            label="Estado"
-            value={form.state}
-            onChange={(v) => setForm({ ...form, state: v })}
-            options={states.map((s) => ({ value: s.id, label: s.name }))}
-          />
-          <Select
-            label="Ubicación"
-            value={form.location}
-            onChange={(v) => setForm({ ...form, location: v })}
-            options={locations.map((l) => ({ value: l.id, label: l.name }))}
-          />
-          <Select
-            label="Tipo"
-            value={form.kind}
-            onChange={(v) => setForm({ ...form, kind: v })}
-            options={[
-              { value: 'consumible', label: 'Consumible / Repuesto' },
-              { value: 'herramienta', label: 'Herramienta / Instrumento' },
-            ]}
-          />
-
-          <Input
-            label="Stock mínimo"
-            type="number"
-            value={form.minimum_stock}
-            onChange={(v) => setForm({ ...form, minimum_stock: v })}
-          />
-          <Input label="Unidad" value={form.unit} onChange={(v) => setForm({ ...form, unit: v })} />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Descripción general</label>
-            <textarea
-              rows={2}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <F label="Nombre del producto">
+              <input value={form.name} onChange={set('name')} required
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+            </F>
+            <F label="Número de parte">
+              <input value={form.part_number} onChange={set('part_number')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+            </F>
+            <F label="Número de serie">
+              <input value={form.numero_serie} onChange={set('numero_serie')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+            </F>
+            <F label="Aplicación/uso">
+              <input value={form.application} onChange={set('application')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+            </F>
+            <F label="Categoría">
+              <select value={form.category} onChange={set('category')} required
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="">Seleccione...</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </F>
+            <F label="Marca (catálogo)">
+              <select value={form.brand} onChange={set('brand')} required
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="">Seleccione...</option>
+                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </F>
+            <F label="Modelo (catálogo)">
+              <select value={form.product_model} onChange={set('product_model')} required
+                disabled={!form.brand}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500">
+                <option value="">{form.brand ? 'Seleccione...' : 'Seleccione marca primero...'}</option>
+                {filteredModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </F>
+            <F label="Estado">
+              <select value={form.state} onChange={set('state')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="">Seleccione...</option>
+                {states.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </F>
+            <F label="Ubicación">
+              <select value={form.location} onChange={set('location')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="">Seleccione...</option>
+                {locations.map((l) => <option key={l.id} value={l.id}>{l.breadcrumb || l.name}</option>)}
+              </select>
+            </F>
+            <F label="Tipo">
+              <select value={form.kind} onChange={set('kind')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="consumible">Consumible / Repuesto</option>
+                <option value="herramienta">Herramienta / Instrumento</option>
+              </select>
+            </F>
+            <F label="Stock mínimo">
+              <input type="number" min="0" value={form.minimum_stock} onChange={set('minimum_stock')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+            </F>
+            <F label="Unidad">
+              <select value={form.unit} onChange={set('unit')}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="">Seleccione...</option>
+                {unitMeasures.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </F>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Especificaciones técnicas</label>
-            <textarea
-              rows={3}
-              value={form.technical_specs}
-              onChange={(e) => setForm({ ...form, technical_specs: e.target.value })}
+
+          <F label="Descripción general">
+            <textarea value={form.description} onChange={set('description')} rows={2}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          </F>
+          <F label="Especificaciones técnicas">
+            <textarea value={form.technical_specs} onChange={set('technical_specs')} rows={3}
               placeholder="Voltaje, potencia, frecuencia, conectores, protocolo, etc."
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <Input
-            label="URL de ficha técnica"
-            value={form.datasheet_url}
-            onChange={(v) => setForm({ ...form, datasheet_url: v })}
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Imagen del producto</label>
-            <input
-              type="file"
-              accept="image/*"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          </F>
+          <F label="URL de ficha técnica">
+            <input value={form.datasheet_url} onChange={set('datasheet_url')}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          </F>
+          <F label="Imagen del producto">
+            <input type="file" accept="image/*"
               onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          </F>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : 'Crear producto'}
-        </button>
-      </form>
+          <button type="submit" disabled={saving}
+            className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50">
+            {saving ? 'Guardando...' : 'Crear producto'}
+          </button>
+        </form>
+      )}
 
+      {/* ── Products list ── */}
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="border-b border-gray-200 px-4 py-3">
           <h3 className="text-sm font-semibold text-gray-900">Productos registrados</h3>
@@ -263,37 +277,48 @@ export default function ProductsPage() {
             <tr>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Código</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Producto</th>
-              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Marca/Modelo</th>
-              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Parte/Serial</th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Marca / Modelo</th>
+              <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Parte</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Estado</th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">Acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 bg-white">
             {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">Cargando...</td>
-              </tr>
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">Cargando...</td></tr>
             ) : products.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">Sin productos registrados.</td>
-              </tr>
-            ) : (
-              products.map((p) => (
-                <tr key={p.id}>
-                  <td className="px-4 py-2 text-sm font-medium text-gray-900">{p.code || '—'}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">{p.name}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">{p.brand_name || '—'} / {p.product_model_name || '—'}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">{p.part_number || '—'} / {p.numero_serie || '—'}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">{p.state_name || 'Sin estado'}</td>
-                  <td className="px-4 py-2 text-sm text-gray-700">
-                    <Link to={`/products/${p.id}`} className="text-brand-700 hover:text-brand-900 font-medium">
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">Sin productos registrados.</td></tr>
+            ) : products.map((p) => (
+              <tr key={p.id}>
+                <td className="px-4 py-2 text-sm font-medium text-gray-900">{p.code || '—'}</td>
+                <td className="px-4 py-2 text-sm text-gray-700">{p.name}</td>
+                <td className="px-4 py-2 text-sm text-gray-700">
+                  {p.brand_name || '—'} / {p.product_model_name || '—'}
+                </td>
+                <td className="px-4 py-2 text-sm text-gray-700">{p.part_number || '—'}</td>
+                <td className="px-4 py-2 text-sm text-gray-700">
+                  <span className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-semibold ${p.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {p.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                  <span className="ml-1 text-xs text-gray-500">{p.state_name || ''}</span>
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  <div className="flex flex-col gap-1">
+                    <Link to={`/products/${p.id}`} className="font-medium text-brand-700 hover:text-brand-900">
                       Ver detalle
                     </Link>
-                  </td>
-                </tr>
-              ))
-            )}
+                    {canCreate && (
+                      <button
+                        onClick={() => toggleProduct(p.id, p.is_active)}
+                        className={`text-left text-xs font-medium ${p.is_active ? 'text-red-600 hover:text-red-800' : 'text-emerald-600 hover:text-emerald-800'}`}
+                      >
+                        {p.is_active ? 'Deshabilitar' : 'Habilitar'}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -301,37 +326,16 @@ export default function ProductsPage() {
   )
 }
 
-function Input({ label, value, onChange, type = 'text', required = false }) {
+function F({ label, children }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-      />
+      {children}
     </div>
   )
 }
 
-function Select({ label, value, onChange, options, required = false, disabled = false }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        disabled={disabled}
-        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
-      >
-        <option value="">{disabled ? 'Seleccione marca primero...' : 'Seleccione...'}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    </div>
-  )
+const kindBadge = {
+  consumible: { label: 'Consumible', cls: 'bg-blue-100 text-blue-700' },
+  herramienta: { label: 'Herramienta', cls: 'bg-purple-100 text-purple-700' },
 }
