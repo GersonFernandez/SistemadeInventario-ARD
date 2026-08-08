@@ -14,6 +14,7 @@ import { serviceOrderApi } from '../services/serviceOrderApi'
 import { productApi } from '../services/productApi'
 import { userApi } from '../services/userApi'
 import ProductPickerField from '../components/ProductPickerField'
+import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 
 const serviceTypeOptions = [
   { value: 'reparacion', label: 'Reparación' },
@@ -36,6 +37,7 @@ export default function ServiceOrderFormPage() {
   const [locations, setLocations] = useState([])
   const [technicians, setTechnicians] = useState([])
   const [saving, setSaving] = useState(false)
+  const [recipientIdError, setRecipientIdError] = useState('')
 
   const [form, setForm] = useState({
     service_type: 'reparacion',
@@ -100,6 +102,12 @@ export default function ServiceOrderFormPage() {
   }, [form.recipient_first_name, form.recipient_last_name])
 
   const handleSubmit = async () => {
+    if (form.recipient_id_card && !isValidDominicanCedula(form.recipient_id_card)) {
+      setRecipientIdError(DOMINICAN_CEDULA_ERROR)
+      toast.error(DOMINICAN_CEDULA_ERROR)
+      return
+    }
+
     const invalidLine = form.write_items.find((line) => !line.item)
     if (invalidLine) {
       toast.error('Cada línea debe tener un producto seleccionado')
@@ -139,7 +147,9 @@ export default function ServiceOrderFormPage() {
       toast.success(`Orden ${data.service_number} creada correctamente`)
       navigate(`/service-orders/${data.id}`)
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'No se pudo crear la orden de servicio')
+      const apiCedulaError = error.response?.data?.recipient_id_card?.[0]
+      if (apiCedulaError) setRecipientIdError(apiCedulaError)
+      toast.error(apiCedulaError || error.response?.data?.detail || 'No se pudo crear la orden de servicio')
     } finally {
       setSaving(false)
     }
@@ -255,11 +265,21 @@ export default function ServiceOrderFormPage() {
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Cédula (opcional)</label>
                 <input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={13}
                   value={form.recipient_id_card}
-                  onChange={(e) => setForm({ ...form, recipient_id_card: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Cédula"
+                  onChange={(e) => {
+                    setForm({ ...form, recipient_id_card: formatDominicanCedula(e.target.value) })
+                    setRecipientIdError('')
+                  }}
+                  onBlur={() => form.recipient_id_card && !isValidDominicanCedula(form.recipient_id_card) && setRecipientIdError(DOMINICAN_CEDULA_ERROR)}
+                  aria-invalid={Boolean(recipientIdError)}
+                  aria-describedby={recipientIdError ? 'service-order-cedula-error' : undefined}
+                  className={`mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${recipientIdError ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
+                  placeholder="000-0000000-0"
                 />
+                {recipientIdError && <p id="service-order-cedula-error" className="mt-1.5 text-sm text-red-600">{recipientIdError}</p>}
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Rango / Cargo (opcional)</label>

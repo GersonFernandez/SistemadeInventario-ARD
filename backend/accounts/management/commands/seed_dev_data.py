@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
+from utils.validators import build_dominican_cedula
 
 from inventory.models import (
     Category,
@@ -397,11 +398,20 @@ class Command(BaseCommand):
                     name=f"DEV-SOL-{i:04d}",
                     defaults={
                         "rank": "Tecnico Naval",
-                        "agent_id": f"DEV-CED-{i:06d}",
+                        "agent_id": build_dominican_cedula(f"402{i:07d}"),
                         "notes": "Solicitante seed dev",
                         "is_active": True,
                     },
                 )
+
+        for i, solicitante in enumerate(
+            Solicitante.objects.filter(name__startswith="DEV-SOL-").order_by("id")[:count],
+            start=1,
+        ):
+            expected_cedula = build_dominican_cedula(f"402{i:07d}")
+            if solicitante.agent_id != expected_cedula:
+                solicitante.agent_id = expected_cedula
+                solicitante.save(update_fields=["agent_id"])
 
         solicitantes = list(
             Solicitante.objects.filter(name__startswith="DEV-SOL-").order_by("id")[:count]
@@ -527,7 +537,7 @@ class Command(BaseCommand):
                 unit=location,
                 recipient_first_name=f"Nombre{i:03d}",
                 recipient_last_name=f"Apellido{i:03d}",
-                recipient_id_card=f"402-{i:07d}-1",
+                recipient_id_card=build_dominican_cedula(f"402{i:07d}"),
                 recipient_rank_position=(
                     "Teniente de Navio" if i % 2 else "Encargado de Comunicaciones"
                 ),
@@ -594,6 +604,15 @@ class Command(BaseCommand):
                     to_status=status,
                     note=diagnosis,
                 )
+
+        for i, service_order in enumerate(
+            ServiceOrder.objects.filter(notes__icontains="seed-dev-service-order").order_by("id")[:count],
+            start=1,
+        ):
+            expected_cedula = build_dominican_cedula(f"402{i:07d}")
+            if service_order.recipient_id_card != expected_cedula:
+                service_order.recipient_id_card = expected_cedula
+                service_order.save(update_fields=["recipient_id_card"])
 
         total = ServiceOrder.objects.filter(notes__icontains="seed-dev-service-order").count()
         self.stdout.write(f"  [OK] Ordenes de servicio seed dev: {total}")

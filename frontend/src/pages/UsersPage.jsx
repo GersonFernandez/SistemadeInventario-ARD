@@ -155,7 +155,11 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    {user.is_active ? 'Activo' : 'Inactivo'}
+                    {!user.is_active
+                      ? 'Inactivo'
+                      : user.must_change_password
+                        ? 'Cambio de contraseña pendiente'
+                        : 'Activo'}
                   </td>
                   <td className="px-6 py-4 text-right text-sm font-medium">
                     <Link

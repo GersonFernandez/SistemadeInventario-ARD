@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
+from utils.validators import build_dominican_cedula
 
 from datetime import timedelta
 import random
@@ -521,13 +522,14 @@ class Command(BaseCommand):
         result = []
         for name, rank, loc_code, agent_id in seed:
             loc = locations.get(loc_code)
+            cedula = build_dominican_cedula(f"402{agent_id}") if agent_id else ""
             s, _ = Solicitante.objects.get_or_create(
                 name=name,
-                defaults={"rank": rank, "unit": loc, "agent_id": agent_id, "is_active": True},
+                defaults={"rank": rank, "unit": loc, "agent_id": cedula, "is_active": True},
             )
             s.rank = rank; s.unit = loc; s.is_active = True
-            if agent_id:
-                s.agent_id = agent_id
+            if cedula:
+                s.agent_id = cedula
             s.save()
             result.append(s)
         self.stdout.write(f"  ✔ {len(result)} solicitantes creados")
@@ -647,6 +649,7 @@ class Command(BaseCommand):
 
         created = 0
         for i, o in enumerate(orders):
+            o["recipient_id_card"] = build_dominican_cedula(o["recipient_id_card"].replace("-", "")[:10])
             item_for_order = consumibles[i % len(consumibles)]
             received_at = timezone.now() - timedelta(days=20 - i * 3)
 
@@ -844,6 +847,9 @@ class Command(BaseCommand):
 
         created = 0
         for s in seed:
+            s["entregado_por_cedula"] = build_dominican_cedula(
+                s["entregado_por_cedula"].replace("-", "")[:10]
+            )
             item = s["item"]
             brand = item.brand
             model = item.product_model

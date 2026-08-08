@@ -1,6 +1,7 @@
 from django.db import DatabaseError
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from utils.validators import normalize_dominican_cedula
 from .models import (
     Despacho,
     LineaDespacho,
@@ -30,6 +31,9 @@ class SolicitanteSerializer(serializers.ModelSerializer):
 
     def get_despachos_count(self, obj):
         return obj.despachos.count()
+
+    def validate_agent_id(self, value):
+        return normalize_dominican_cedula(value) if value else ''
 
 
 class SolicitanteSimpleSerializer(serializers.ModelSerializer):
@@ -299,6 +303,9 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         if value and value.role != 'tecnico':
             raise serializers.ValidationError('Solo se puede asignar un usuario con rol técnico.')
         return value
+
+    def validate_recipient_id_card(self, value):
+        return normalize_dominican_cedula(value) if value else ''
 
     def validate_equipment(self, value):
         if not value.is_base_product:

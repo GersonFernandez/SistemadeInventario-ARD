@@ -1,8 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthContext'
+import SystemToaster from './components/SystemToaster'
 import App from './App'
 import './index.css'
 
@@ -13,7 +13,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter basename={basename}>
       <AuthProvider>
         <App />
-        <Toaster position="top-right" />
+        <SystemToaster />
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

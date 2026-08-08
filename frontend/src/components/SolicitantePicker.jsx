@@ -101,7 +101,7 @@ export default function SolicitantePicker({ value, onChange, disabled = false })
               <span className="font-medium text-gray-700">Rango:</span> {currentValue.rank || 'No indicado'}
             </div>
             <div>
-              <span className="font-medium text-gray-700">Cédula / ID:</span> {currentValue.agent_id || 'No indicado'}
+              <span className="font-medium text-gray-700">Cédula dominicana:</span> {currentValue.agent_id || 'No indicado'}
             </div>
             <div className="sm:col-span-2">
               <span className="font-medium text-gray-700">Estado:</span>{' '}
@@ -132,7 +132,7 @@ export default function SolicitantePicker({ value, onChange, disabled = false })
               }}
               onFocus={() => setShowList(true)}
               disabled={disabled}
-              placeholder="Buscar solicitante por nombre, rango, cédula o unidad..."
+              placeholder="Buscar por nombre, rango, cédula dominicana o unidad..."
               className="w-full rounded-md border border-gray-300 px-3 py-2 pl-9 pr-10 text-sm focus:border-brand-700 focus:outline-none focus:ring-brand-700"
             />
             <button

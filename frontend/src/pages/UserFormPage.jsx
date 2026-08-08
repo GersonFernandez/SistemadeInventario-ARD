@@ -15,6 +15,7 @@ export default function UserFormPage() {
   const isEditing = Boolean(id)
 
   const [loading, setLoading] = useState(isEditing)
+  const [errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
     email: '',
     name: '',
@@ -51,6 +52,7 @@ export default function UserFormPage() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
+    setErrors((current) => ({ ...current, [name]: undefined }))
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -60,7 +62,6 @@ export default function UserFormPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    // ── Frontend validation ──
     const errs = {}
     if (!formData.name.trim())  errs.name  = 'El nombre completo es obligatorio'
     if (!formData.email.trim()) errs.email = 'El correo es obligatorio'
@@ -68,18 +69,17 @@ export default function UserFormPage() {
     if (!formData.role)         errs.role  = 'Seleccione un rol'
     if (!isEditing && !formData.password)         errs.password = 'La contraseña es obligatoria para nuevos usuarios'
     if (!isEditing && formData.password && formData.password.length < 8) errs.password = 'La contraseña debe tener al menos 8 caracteres'
-    if (isEditing && formData.password && formData.password.length < 8) errs.password = 'Si deseas cambiar la contraseña, debe tener al menos 8 caracteres'
 
     if (Object.keys(errs).length) {
+      setErrors(errs)
       toast.error('Corrija los campos marcados antes de continuar')
-      // surface each error as a toast so they're visible even without inline errors
-      Object.values(errs).forEach((msg) => toast.error(msg, { duration: 4000 }))
       return
     }
 
+    setErrors({})
     try {
       const payload = { ...formData }
-      if (!payload.password && isEditing) {
+      if (isEditing) {
         delete payload.password
       }
 
@@ -93,11 +93,19 @@ export default function UserFormPage() {
 
       navigate('/users')
     } catch (error) {
-      const message =
-        error.response?.data?.detail ||
-        Object.values(error.response?.data || {}).flat().join(', ') ||
-        'Error al guardar el usuario'
-      toast.error(message)
+      const responseErrors = error.response?.data
+      if (responseErrors && typeof responseErrors === 'object' && !responseErrors.detail) {
+        const fieldErrors = Object.fromEntries(
+          Object.entries(responseErrors).map(([field, messages]) => [
+            field,
+            Array.isArray(messages) ? messages.join(' ') : String(messages),
+          ]),
+        )
+        setErrors(fieldErrors)
+        toast.error('Revise los campos señalados en el formulario')
+      } else {
+        toast.error(responseErrors?.detail || 'No se pudo guardar el usuario. Intente nuevamente.')
+      }
     }
   }
 
@@ -120,8 +128,11 @@ export default function UserFormPage() {
               value={formData.name}
               onChange={handleChange}
               required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+              aria-invalid={Boolean(errors.name)}
+              aria-describedby={errors.name ? 'name-error' : undefined}
+              className={`mt-1 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${errors.name ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
             />
+            {errors.name && <p id="name-error" className="mt-1.5 text-sm text-red-600">{errors.name}</p>}
           </div>
 
           <div className="sm:col-span-2">
@@ -132,8 +143,11 @@ export default function UserFormPage() {
               value={formData.email}
               onChange={handleChange}
               required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? 'email-error' : undefined}
+              className={`mt-1 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${errors.email ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
             />
+            {errors.email && <p id="email-error" className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
           </div>
 
           <div>
@@ -143,7 +157,9 @@ export default function UserFormPage() {
               value={formData.role}
               onChange={handleChange}
               required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+              aria-invalid={Boolean(errors.role)}
+              aria-describedby={errors.role ? 'role-error' : undefined}
+              className={`mt-1 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${errors.role ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
             >
               {roleOptions.map((role) => (
                 <option key={role.value} value={role.value}>
@@ -151,6 +167,7 @@ export default function UserFormPage() {
                 </option>
               ))}
             </select>
+            {errors.role && <p id="role-error" className="mt-1.5 text-sm text-red-600">{errors.role}</p>}
           </div>
 
           <div>
@@ -159,23 +176,33 @@ export default function UserFormPage() {
               name="agent_id"
               value={formData.agent_id}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+              aria-invalid={Boolean(errors.agent_id)}
+              aria-describedby={errors.agent_id ? 'agent-id-error' : undefined}
+              className={`mt-1 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${errors.agent_id ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
             />
+            {errors.agent_id && <p id="agent-id-error" className="mt-1.5 text-sm text-red-600">{errors.agent_id}</p>}
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Contraseña {isEditing && '(dejar en blanco para mantener actual)'}
-            </label>
-            <input
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleChange}
-              required={!isEditing}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700"
-            />
-          </div>
+          {!isEditing && (
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Contraseña temporal</label>
+              <input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                aria-invalid={Boolean(errors.password)}
+                aria-describedby={errors.password ? 'password-error password-help' : 'password-help'}
+                className={`mt-1 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${errors.password ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
+              />
+              {errors.password && <p id="password-error" className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
+              <p id="password-help" className="mt-1 text-xs text-gray-500">
+                El usuario deberá reemplazarla cuando inicie sesión por primera vez.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center h-full pt-6">
             <label className="flex items-center gap-2">

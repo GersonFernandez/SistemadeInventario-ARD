@@ -32,11 +32,11 @@ export default function Layout({ children }) {
   const pageTitle = usePageTitle(location.pathname)
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
       <SessionTimeout />
 
       {/* ── Sidebar ── */}
-      <aside className="w-64 bg-brand-900 text-white flex flex-col flex-shrink-0">
+      <aside className="w-64 bg-brand-900 text-white flex h-screen flex-col flex-shrink-0 sticky top-0">
         {/* Brand */}
         <div className="px-5 py-5 border-b border-brand-800">
           <div className="flex items-center gap-2">
@@ -87,14 +87,14 @@ export default function Layout({ children }) {
       </aside>
 
       {/* ── Content ── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex min-w-0 flex-col overflow-hidden">
         <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
           <p className="text-sm font-semibold text-gray-800">{pageTitle}</p>
           <time className="text-xs text-gray-500">
             {new Date().toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </time>
         </header>
-        <main className="flex-1 p-8 bg-gray-50 overflow-auto">
+        <main className="flex-1 p-8 bg-gray-50 overflow-auto min-h-0">
           {children}
         </main>
       </div>

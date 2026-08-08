@@ -11,20 +11,46 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    agent_id = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=20,
+        validators=[],
+    )
+
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'role', 'agent_id', 'is_active', 'date_joined']
-        read_only_fields = ['id', 'date_joined']
+        fields = ['id', 'email', 'name', 'role', 'agent_id', 'is_active', 'must_change_password', 'date_joined']
+        read_only_fields = ['id', 'must_change_password', 'date_joined']
+
+    def validate_agent_id(self, value):
+        normalized_value = value.strip() if value else None
+        if normalized_value:
+            queryset = User.objects.filter(agent_id=normalized_value)
+            if self.instance:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            if queryset.exists():
+                raise serializers.ValidationError('Esta matrícula ya está asignada a otro usuario.')
+        return normalized_value
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    agent_id = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=20,
+        validators=[],
+    )
 
     class Meta:
         model = User
         fields = ['id', 'email', 'name', 'role', 'agent_id', 'password']
 
     def create(self, validated_data):
+        validated_data['must_change_password'] = True
         user = User.objects.create_user(**validated_data)
         if user.role == User.Role.TECNICO:
             send_mail(
@@ -44,11 +70,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate_agent_id(self, value):
+        normalized_value = value.strip() if value else None
+        if normalized_value and User.objects.filter(agent_id=normalized_value).exists():
+            raise serializers.ValidationError('Esta matrícula ya está asignada a otro usuario.')
+        return normalized_value
+
 
 class PasswordChangeSerializer(serializers.Serializer):
-    current_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True)
-    confirm_new_password = serializers.CharField(write_only=True)
+    current_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    new_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    confirm_new_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
 
     def validate(self, attrs):
         user = self.context['request'].user

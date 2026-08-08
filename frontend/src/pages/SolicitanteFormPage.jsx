@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { solicitanteApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
+import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 
 const emptyForm = {
   name: '',
@@ -26,6 +27,7 @@ export default function SolicitanteFormPage() {
   const [locationsLoading, setLocationsLoading] = useState(true)
   const [locations, setLocations] = useState([])
   const [form, setForm] = useState(emptyForm)
+  const [cedulaError, setCedulaError] = useState('')
 
   useEffect(() => {
     if (!canManage) {
@@ -92,8 +94,9 @@ export default function SolicitanteFormPage() {
       return false
     }
 
-    if (form.agent_id.trim().length > 30) {
-      toast.error('La cédula o ID no puede superar 30 caracteres')
+    if (form.agent_id && !isValidDominicanCedula(form.agent_id)) {
+      setCedulaError(DOMINICAN_CEDULA_ERROR)
+      toast.error(DOMINICAN_CEDULA_ERROR)
       return false
     }
 
@@ -135,8 +138,10 @@ export default function SolicitanteFormPage() {
       navigate('/solicitantes')
     } catch (error) {
       const apiData = error.response?.data
+      const apiCedulaError = apiData?.agent_id?.[0]
+      if (apiCedulaError) setCedulaError(apiCedulaError)
       const message =
-        apiData?.detail ||
+        apiCedulaError || apiData?.detail ||
         (apiData ? Object.values(apiData).flat().join(', ') : null) ||
         'No se pudo guardar el solicitante'
       toast.error(message)
@@ -164,7 +169,7 @@ export default function SolicitanteFormPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:items-start">
         <section className="space-y-6 xl:col-span-2">
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-base font-semibold text-gray-900">Identificación</h3>
@@ -195,14 +200,24 @@ export default function SolicitanteFormPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">Cédula / ID militar</label>
+                <label className="block text-sm font-medium text-gray-700">Cédula dominicana</label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={13}
                   value={form.agent_id}
-                  onChange={(e) => updateField('agent_id', e.target.value)}
-                  placeholder="Ej: 123-4567890-1"
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700"
+                  onChange={(e) => {
+                    updateField('agent_id', formatDominicanCedula(e.target.value))
+                    setCedulaError('')
+                  }}
+                  onBlur={() => form.agent_id && !isValidDominicanCedula(form.agent_id) && setCedulaError(DOMINICAN_CEDULA_ERROR)}
+                  placeholder="000-0000000-0"
+                  aria-invalid={Boolean(cedulaError)}
+                  aria-describedby={cedulaError ? 'solicitante-cedula-error' : undefined}
+                  className={`mt-1 block w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${cedulaError ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
                 />
+                {cedulaError && <p id="solicitante-cedula-error" className="mt-1.5 text-sm text-red-600">{cedulaError}</p>}
               </div>
             </div>
           </div>
@@ -243,7 +258,7 @@ export default function SolicitanteFormPage() {
           </div>
         </section>
 
-        <aside className="space-y-6">
+        <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-900">Resumen</h3>
             <dl className="mt-4 space-y-3 text-sm">
@@ -260,7 +275,7 @@ export default function SolicitanteFormPage() {
                 <dd className="font-medium text-gray-900">{selectedLocationLabel}</dd>
               </div>
               <div>
-                <dt className="text-gray-500">Cédula / ID</dt>
+                <dt className="text-gray-500">Cédula dominicana</dt>
                 <dd className="font-medium text-gray-900">{form.agent_id.trim() || 'No indicado'}</dd>
               </div>
             </dl>

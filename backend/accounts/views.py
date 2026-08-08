@@ -15,7 +15,7 @@ from .serializers import (
     AdminResetPasswordSerializer,
     SystemSettingSerializer,
 )
-from .permissions import IsAlmacenista
+from .permissions import IsAdmin
 
 User = get_user_model()
 
@@ -51,7 +51,8 @@ class PasswordChangeView(APIView):
         serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data['new_password'])
-        request.user.save(update_fields=['password'])
+        request.user.must_change_password = False
+        request.user.save(update_fields=['password', 'must_change_password'])
 
         send_mail(
             subject='Cambio de contraseña confirmado',
@@ -68,12 +69,9 @@ class PasswordChangeView(APIView):
 
 
 class AdminResetPasswordView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsAlmacenista]
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
     def post(self, request):
-        if request.user.role != 'admin':
-            return Response({'detail': 'Solo administradores pueden restablecer contraseñas.'}, status=status.HTTP_403_FORBIDDEN)
-
         serializer = AdminResetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -84,7 +82,8 @@ class AdminResetPasswordView(APIView):
 
         temporary_password = get_random_string(length=12)
         user.set_password(temporary_password)
-        user.save(update_fields=['password'])
+        user.must_change_password = True
+        user.save(update_fields=['password', 'must_change_password'])
 
         send_mail(
             subject='Restablecimiento de contraseña',
@@ -120,19 +119,12 @@ class SystemSettingView(APIView):
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
-    permission_classes = [permissions.IsAuthenticated, IsAlmacenista]
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
     def get_serializer_class(self):
         if self.action == 'create':
             return UserCreateSerializer
         return UserSerializer
-
-    def perform_update(self, serializer):
-        instance = serializer.save()
-        password = self.request.data.get('password')
-        if password:
-            instance.set_password(password)
-            instance.save(update_fields=['password'])
 
     def perform_destroy(self, instance):
         instance.is_active = False

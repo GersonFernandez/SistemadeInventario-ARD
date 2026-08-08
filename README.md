@@ -173,6 +173,29 @@ Ver estado:
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 ```
 
+### Correo SMTP
+
+Las contraseñas temporales se envían mediante SMTP. Configura estas variables en `.env` para desarrollo o en `.env.prod` para producción:
+
+```env
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.office365.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=cuenta@dominio.com
+EMAIL_HOST_PASSWORD=contraseña-de-aplicacion
+EMAIL_USE_TLS=True
+EMAIL_USE_SSL=False
+DEFAULT_FROM_EMAIL=cuenta@dominio.com
+```
+
+Usa una contraseña de aplicación cuando el proveedor tenga autenticación multifactor. Para Gmail, cambia el host a `smtp.gmail.com`; para Microsoft 365 conserva `smtp.office365.com`. El puerto `587` usa TLS. No actives TLS y SSL al mismo tiempo.
+
+Después de reiniciar los contenedores, verifica el envío sin mostrar la contraseña:
+
+```bash
+docker compose exec backend python manage.py shell -c "from django.core.mail import send_mail; print(send_mail('Prueba SMTP', 'Configuración correcta.', None, ['destino@dominio.com'], fail_silently=False))"
+```
+
 ## Uso
 
 1. Accede al frontend en el navegador.

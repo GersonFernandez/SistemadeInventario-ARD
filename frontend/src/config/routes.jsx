@@ -22,6 +22,7 @@ import SolicitanteFormPage from '../pages/SolicitanteFormPage'
 import UsersPage from '../pages/UsersPage'
 import UserFormPage from '../pages/UserFormPage'
 import ReceptionFormPage from '../pages/ReceptionFormPage'
+import SecurityPage from '../pages/SecurityPage'
 
 const appRoutes = [
   { path: '/login', element: <LoginPage />, publicRoute: true },
@@ -49,6 +50,7 @@ const appRoutes = [
   { path: '/users', element: <UsersPage />, allowedRoles: ['admin'] },
   { path: '/users/new', element: <UserFormPage />, allowedRoles: ['admin'] },
   { path: '/users/:id/edit', element: <UserFormPage />, allowedRoles: ['admin'] },
+  { path: '/security', element: <SecurityPage />, allowedRoles: ['admin', 'almacenista', 'tecnico'] },
   { path: '*', element: <Navigate to="/" replace />, publicRoute: true },
 ]
 

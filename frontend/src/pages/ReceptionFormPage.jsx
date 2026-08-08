@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { inventoryApi } from '../services/inventoryApi'
 import ProductPickerField from '../components/ProductPickerField'
+import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 
 const emptyLine = {
   tipo: 'nuevo',
@@ -35,6 +36,7 @@ export default function ReceptionFormPage() {
   const [entregadoPorNombre, setEntregadoPorNombre] = useState('')
   const [entregadoPorApellido, setEntregadoPorApellido] = useState('')
   const [entregadoPorCedula, setEntregadoPorCedula] = useState('')
+  const [cedulaError, setCedulaError] = useState('')
   const [entregadoPorRangoCargo, setEntregadoPorRangoCargo] = useState('')
   const [photos, setPhotos] = useState([])
   const [documents, setDocuments] = useState([])
@@ -142,6 +144,11 @@ export default function ReceptionFormPage() {
       toast.error('Complete los datos de quien entrega')
       return
     }
+    if (!isValidDominicanCedula(entregadoPorCedula)) {
+      setCedulaError(DOMINICAN_CEDULA_ERROR)
+      toast.error(DOMINICAN_CEDULA_ERROR)
+      return
+    }
     if (!selectedLocation) {
       toast.error('Seleccione una ubicación de almacenamiento')
       return
@@ -188,13 +195,16 @@ export default function ReceptionFormPage() {
       setEntregadoPorNombre('')
       setEntregadoPorApellido('')
       setEntregadoPorCedula('')
+      setCedulaError('')
       setEntregadoPorRangoCargo('')
       setLineas([{ ...emptyLine }])
       setPhotos([])
       setDocuments([])
       setSignedReceipt([])
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'No se pudo guardar la recepción')
+      const apiCedulaError = error.response?.data?.entregado_por_cedula?.[0]
+      if (apiCedulaError) setCedulaError(apiCedulaError)
+      toast.error(apiCedulaError || error.response?.data?.detail || 'No se pudo guardar la recepción')
     } finally {
       setSaving(false)
     }
@@ -244,7 +254,23 @@ export default function ReceptionFormPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Cédula</label>
-                <input className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" value={entregadoPorCedula} onChange={(e) => setEntregadoPorCedula(e.target.value)} required />
+                <input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={13}
+                  placeholder="000-0000000-0"
+                  value={entregadoPorCedula}
+                  onChange={(e) => {
+                    setEntregadoPorCedula(formatDominicanCedula(e.target.value))
+                    setCedulaError('')
+                  }}
+                  onBlur={() => entregadoPorCedula && !isValidDominicanCedula(entregadoPorCedula) && setCedulaError(DOMINICAN_CEDULA_ERROR)}
+                  aria-invalid={Boolean(cedulaError)}
+                  aria-describedby={cedulaError ? 'reception-cedula-error' : undefined}
+                  className={`mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${cedulaError ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-brand-700 focus:ring-brand-100'}`}
+                  required
+                />
+                {cedulaError && <p id="reception-cedula-error" className="mt-1.5 text-sm text-red-600">{cedulaError}</p>}
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Rango / Cargo</label>

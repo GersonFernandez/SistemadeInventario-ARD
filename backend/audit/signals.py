@@ -4,6 +4,8 @@ from django.db.migrations.recorder import MigrationRecorder
 from .models import AuditLog
 from .middleware import get_current_request
 
+SENSITIVE_FIELDS = {'password'}
+
 
 def _format_dirty(instance, dirty):
     """Normalize get_dirty_fields() output into {field: {old, new}}.
@@ -13,6 +15,9 @@ def _format_dirty(instance, dirty):
     """
     result = {}
     for field, saved_value in (dirty or {}).items():
+        if field in SENSITIVE_FIELDS:
+            result[field] = {'old': '[REDACTED]', 'new': '[REDACTED]'}
+            continue
         try:
             current_value = getattr(instance, field, None)
         except Exception:
@@ -63,6 +68,9 @@ def log_delete(sender, instance, **kwargs):
 
     snapshot = {}
     for field in instance._meta.fields:
+        if field.name in SENSITIVE_FIELDS:
+            snapshot[field.name] = '[REDACTED]'
+            continue
         try:
             value = getattr(instance, field.name)
             snapshot[field.name] = str(value) if value is not None else None

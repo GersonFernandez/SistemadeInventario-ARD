@@ -140,7 +140,7 @@ export default function SolicitantesPage() {
               type="text" value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Nombre, rango, cédula…"
+              placeholder="Nombre, rango, cédula dominicana…"
               className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-brand-700 focus:outline-none"
             />
           </div>
@@ -186,7 +186,7 @@ export default function SolicitantesPage() {
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Solicitante</th>
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Unidad / Base</th>
-                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Cédula / ID</th>
+                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Cédula dominicana</th>
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Estado</th>
                 {canManage && <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Acciones</th>}
               </tr>

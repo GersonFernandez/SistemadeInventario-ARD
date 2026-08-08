@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.core.validators import FileExtensionValidator
+from utils.validators import normalize_dominican_cedula
 from .models import (
     Category,
     Brand,
@@ -609,6 +610,9 @@ class EntradaProductoBatchCreateSerializer(serializers.Serializer):
     entregado_por_cedula = serializers.CharField(max_length=30)
     entregado_por_rango_cargo = serializers.CharField(max_length=120)
     lineas = EntradaProductoLineInputSerializer(many=True)
+
+    def validate_entregado_por_cedula(self, value):
+        return normalize_dominican_cedula(value)
 
     def validate_lineas(self, value):
         if not value:

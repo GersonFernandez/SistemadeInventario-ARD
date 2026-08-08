@@ -295,6 +295,15 @@ class SolicitanteAPITest(TestCase):
         response = self.client.get('/api/v1/work-orders/solicitantes/')
         self.assertEqual(response.status_code, 200)
 
+    def test_create_solicitante_rejects_invalid_dominican_cedula(self):
+        response = self.client.post('/api/v1/work-orders/solicitantes/', {
+            'name': 'Solicitante con cédula inválida',
+            'agent_id': '001-1391825-0',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('agent_id', response.json())
+
     def test_search_solicitante(self):
         Solicitante.objects.create(name='Capitán Pérez', rank='Capitán')
         Solicitante.objects.create(name='Teniente Gómez', rank='Teniente')
@@ -369,6 +378,21 @@ class ServiceOrderCreateAPITest(TestCase):
         self.assertEqual(ServiceOrder.objects.count(), 1)
         self.assertEqual(ServiceOrderItem.objects.count(), 1)
         self.assertEqual(ServiceOrder.objects.get(pk=data['id']).equipment_id, self.item.id)
+
+    def test_create_service_order_rejects_invalid_dominican_cedula(self):
+        response = self.client.post('/api/v1/work-orders/service-orders/', {
+            'service_type': 'reparacion',
+            'recipient_id_card': '001-1391825-0',
+            'write_items': [{
+                'item': self.item.id,
+                'serial_number': 'SRV-CED-001',
+                'description': 'Equipo de prueba',
+                'equipment_condition': 'usado',
+            }],
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('recipient_id_card', response.json())
 
 
 class ServiceOrderReceiptAPITest(TestCase):
