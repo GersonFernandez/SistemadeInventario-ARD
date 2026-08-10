@@ -206,6 +206,9 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
                 'date': repair.repaired_at,
                 'technician': repair.technician.name,
                 'details': repair.details,
+                'item': repair.item.name,
+                'serial': repair.item.numero_serie or None,
+                'attachment': repair.attachment.url if repair.attachment else None,
             })
         for installation in installation_records:
             entries.append({
@@ -215,6 +218,9 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
                 'technician': installation.technician.name,
                 'details': installation.notes,
                 'location': installation.location.name,
+                'item': installation.item.name,
+                'serial': installation.serial_number or installation.item.numero_serie or None,
+                'state_snapshot': installation.state_snapshot or None,
             })
         for service_order in service_orders:
             entries.append({
@@ -225,6 +231,12 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
                 'details': service_order.diagnosis or service_order.work_performed or service_order.notes,
                 'status': service_order.get_status_display(),
                 'serial': service_order.equipment_serial_number,
+                'service_number': service_order.service_number,
+                'diagnosis': service_order.diagnosis,
+                'work_performed': service_order.work_performed,
+                'received_at': service_order.received_at,
+                'completed_at': service_order.completed_at,
+                'delivered_at': service_order.delivered_at,
             })
 
         entries.sort(key=lambda entry: entry['date'], reverse=True)

@@ -4,6 +4,7 @@ import { PlusIcon, PencilIcon, TrashIcon, MapPinIcon, TagIcon, XMarkIcon } from 
 import { inventoryApi } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
 import LocationTypePicker from '../components/LocationTypePicker'
+import { hasPermission } from '../utils/permissions'
 
 const typeBadgeClass = (code) => {
   const map = {
@@ -18,7 +19,7 @@ const typeBadgeClass = (code) => {
 
 export default function LocationsPage() {
   const { user } = useAuth()
-  const canEdit = user?.role === 'admin' || user?.role === 'almacenista'
+  const canEdit = hasPermission(user, 'locations.manage', ['admin', 'almacenista'])
   const [tab, setTab] = useState('ubicaciones')
 
   return (

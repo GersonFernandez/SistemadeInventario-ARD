@@ -5,6 +5,7 @@ import { ArrowLeftIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outlin
 import { serviceOrderApi } from '../services/serviceOrderApi'
 import { useAuth } from '../context/AuthContext'
 import { downloadBlob } from '../utils/download'
+import { hasPermission } from '../utils/permissions'
 
 const statusOptions = [
   { value: 'recibido', label: 'Recibido' },
@@ -20,6 +21,8 @@ export default function ServiceOrderDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const canManageServiceOrders = hasPermission(user, 'service_orders.manage', ['admin', 'almacenista'])
+  const canExport = hasPermission(user, 'reports.export', ['admin', 'almacenista', 'tecnico'])
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [completing, setCompleting] = useState(false)
@@ -49,7 +52,7 @@ export default function ServiceOrderDetailPage() {
   }
 
   const canOperateOrder = (currentOrder) => {
-    if (user?.role === 'admin' || user?.role === 'almacenista') return true
+    if (canManageServiceOrders) return true
     return user?.role === 'tecnico' && currentOrder?.assigned_technician === user?.id
   }
 
@@ -167,7 +170,7 @@ export default function ServiceOrderDetailPage() {
           <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-800">
             {order.status_display}
           </span>
-          {(order.status === 'completado' || order.status === 'entregado') && (
+          {canExport && (order.status === 'completado' || order.status === 'entregado') && (
             <button
               type="button"
               onClick={() => handleDownloadCompletionReceipt('pdf')}
@@ -291,7 +294,32 @@ export default function ServiceOrderDetailPage() {
                         {entry.location ? ` · ${entry.location}` : ''}
                         {entry.status ? ` · ${entry.status}` : ''}
                       </div>
-                      {entry.details && <div className="mt-2 text-xs text-gray-700">{entry.details}</div>}
+                      {entry.service_number && (
+                        <div className="mt-2 text-xs text-gray-700">
+                          <span className="font-semibold">Orden:</span> {entry.service_number}
+                        </div>
+                      )}
+                      {entry.serial && (
+                        <div className="mt-1 text-xs text-gray-700">
+                          <span className="font-semibold">No. Serie:</span> {entry.serial}
+                        </div>
+                      )}
+                      {entry.state_snapshot && (
+                        <div className="mt-1 text-xs text-gray-700">
+                          <span className="font-semibold">Estado registrado:</span> {entry.state_snapshot}
+                        </div>
+                      )}
+                      {entry.diagnosis && (
+                        <div className="mt-1 text-xs text-gray-700">
+                          <span className="font-semibold">Diagnóstico:</span> {entry.diagnosis}
+                        </div>
+                      )}
+                      {entry.work_performed && (
+                        <div className="mt-1 text-xs text-gray-700">
+                          <span className="font-semibold">Trabajo realizado:</span> {entry.work_performed}
+                        </div>
+                      )}
+                      {entry.details && <div className="mt-2 text-xs text-gray-700 whitespace-pre-wrap">{entry.details}</div>}
                     </li>
                   ))}
                 </ul>

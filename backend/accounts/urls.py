@@ -6,6 +6,7 @@ from .views import (
     LogoutView,
     MeView,
     UserViewSet,
+    RolePermissionViewSet,
     PasswordChangeView,
     AdminResetPasswordView,
     SystemSettingView,
@@ -13,6 +14,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
+router.register(r'role-permissions', RolePermissionViewSet, basename='role-permission')
 
 urlpatterns = [
     path('auth/login/', LoginView.as_view(), name='login'),

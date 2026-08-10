@@ -16,6 +16,7 @@ import { productApi } from '../services/productApi'
 import { inventoryApi } from '../services/inventoryApi'
 import { downloadBlob } from '../utils/download'
 import { useAuth } from '../context/AuthContext'
+import { hasPermission } from '../utils/permissions'
 
 const kindBadge = {
   consumible:  { label: 'Consumible',  cls: 'bg-blue-100 text-blue-800' },
@@ -24,7 +25,8 @@ const kindBadge = {
 
 export default function ProductsPage() {
   const { user } = useAuth()
-  const canCreate = user?.role === 'admin' || user?.role === 'almacenista'
+  const canCreate = hasPermission(user, 'products.manage', ['admin', 'almacenista'])
+  const canExport = hasPermission(user, 'reports.export', ['admin', 'almacenista', 'tecnico'])
 
   // ── catalogs ──
   const [categories, setCategories]     = useState([])
@@ -49,8 +51,11 @@ export default function ProductsPage() {
   const [saving, setSaving]       = useState(false)
   const [imageFile, setImageFile] = useState(null)
   const [showForm, setShowForm]   = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryDescription, setNewCategoryDescription] = useState('')
+  const [creatingCategory, setCreatingCategory] = useState(false)
   const [form, setForm] = useState({
-    name: '', part_number: '', numero_serie: '', application: '',
+    name: '', part_number: '', application: '',
     category: '', brand: '', product_model: '', state: '',
     location: '', kind: 'consumible', minimum_stock: 0, unit: '',
     description: '', technical_specs: '', datasheet_url: '',
@@ -152,7 +157,7 @@ export default function ProductsPage() {
 
   const resetForm = () => {
     setForm({
-      name: '', part_number: '', numero_serie: '', application: '',
+      name: '', part_number: '', application: '',
       category: '', brand: '', product_model: '', state: '',
       location: '', kind: 'consumible', minimum_stock: 0, unit: '',
       description: '', technical_specs: '', datasheet_url: '',
@@ -208,6 +213,40 @@ export default function ProductsPage() {
     }
   }
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Debe escribir el nombre de la categoría')
+      return
+    }
+
+    setCreatingCategory(true)
+    try {
+      const payload = {
+        name: newCategoryName.trim(),
+        description: newCategoryDescription.trim(),
+      }
+      const { data } = await productApi.createCategory(payload)
+      const created = data.results || data
+      const createdCategory = Array.isArray(created) ? created[0] : created
+
+      setCategories((prev) => {
+        const list = Array.isArray(prev) ? [...prev] : []
+        const exists = list.some((item) => String(item.id) === String(createdCategory.id))
+        if (exists) return list
+        return [...list, createdCategory].sort((a, b) => a.name.localeCompare(b.name))
+      })
+      setForm((prev) => ({ ...prev, category: String(createdCategory.id) }))
+      setNewCategoryName('')
+      setNewCategoryDescription('')
+      toast.success('Categoría creada')
+    } catch (error) {
+      const message = error.response?.data?.detail || Object.values(error.response?.data || {}).flat().join(', ') || 'No se pudo crear la categoría'
+      toast.error(message)
+    } finally {
+      setCreatingCategory(false)
+    }
+  }
+
   // ── RENDER ──
   // When showForm=true  → full-page creation form, list is hidden
   // When showForm=false → list view with filters
@@ -258,11 +297,6 @@ export default function ProductsPage() {
                     <input value={form.part_number} onChange={set('part_number')}
                       className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Número de serie</label>
-                    <input value={form.numero_serie} onChange={set('numero_serie')}
-                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                  </div>
                   <div className="md:col-span-2">
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Aplicación / uso</label>
                     <input value={form.application} onChange={set('application')}
@@ -302,6 +336,29 @@ export default function ProductsPage() {
                       <option value="">Seleccione...</option>
                       {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <input
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Nueva categoría"
+                        className="rounded-md border border-gray-300 px-3 py-2 text-xs"
+                      />
+                      <input
+                        value={newCategoryDescription}
+                        onChange={(e) => setNewCategoryDescription(e.target.value)}
+                        placeholder="Descripción (opcional)"
+                        className="rounded-md border border-gray-300 px-3 py-2 text-xs sm:col-span-2"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCreateCategory}
+                      disabled={creatingCategory}
+                      className="mt-2 inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      <PlusIcon className="h-3.5 w-3.5" />
+                      {creatingCategory ? 'Creando…' : 'Crear categoría rápida'}
+                    </button>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Marca <span className="text-red-500">*</span></label>
@@ -439,20 +496,22 @@ export default function ProductsPage() {
           <p className="mt-1 text-sm text-gray-500">Catálogo de componentes, repuestos e instrumentos del taller.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative" data-report-menu>
-            <button onClick={() => setShowReportMenu((s) => !s)}
-              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              <DocumentArrowDownIcon className="h-4 w-4" />
-              Exportar
-              <ChevronDownIcon className="h-3 w-3" />
-            </button>
-            {showReportMenu && (
-              <div className="absolute right-0 mt-1 w-44 rounded-xl border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
-                <button onClick={() => handleDownload('pdf')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF</button>
-                <button onClick={() => handleDownload('excel')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel</button>
-              </div>
-            )}
-          </div>
+          {canExport && (
+            <div className="relative" data-report-menu>
+              <button onClick={() => setShowReportMenu((s) => !s)}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <DocumentArrowDownIcon className="h-4 w-4" />
+                Exportar
+                <ChevronDownIcon className="h-3 w-3" />
+              </button>
+              {showReportMenu && (
+                <div className="absolute right-0 mt-1 w-44 rounded-xl border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
+                  <button onClick={() => handleDownload('pdf')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF</button>
+                  <button onClick={() => handleDownload('excel')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel</button>
+                </div>
+              )}
+            </div>
+          )}
           {canCreate && (
             <button onClick={() => setShowForm(true)}
               className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900">

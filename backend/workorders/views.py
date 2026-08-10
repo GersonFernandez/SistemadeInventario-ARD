@@ -6,7 +6,6 @@ from django.utils import timezone
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from utils.reports import build_report
 from .models import Despacho, LineaDespacho, Solicitante, ServiceOrder, ServiceOrderLog
@@ -22,6 +21,7 @@ from .serializers import (
 )
 from .permissions import IsAlmacenistaOrAdmin, IsAssignedTechnicianOrAdmin
 from .services import DispatchService
+from accounts.permissions import require_permission
 
 
 User = get_user_model()
@@ -35,12 +35,9 @@ class SolicitanteViewSet(viewsets.ModelViewSet):
     """
     queryset = Solicitante.objects.select_related('unit').all()
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'solicitantes.view'
+    manage_permission_key = 'solicitantes.manage'
     pagination_class = None
-
-    def get_permissions(self):
-        if self.action in ('list', 'retrieve'):
-            return [permissions.IsAuthenticated()]
-        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -85,6 +82,15 @@ class DespachoViewSet(viewsets.ModelViewSet):
         'solicitante', 'solicitante__unit', 'unit', 'delivered_by', 'cancelled_by',
     ).prefetch_related('lineas', 'lineas__item', 'lineas__item_unit').all()
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'despachos.view'
+    manage_permission_key = 'despachos.manage'
+    permission_map_by_action = {
+        'report': 'reports.export',
+        'reception_dispatch_report': 'reports.export',
+        'receipt': 'reports.export',
+        'dispatchable_items': 'despachos.manage',
+        'cancel': 'despachos.manage',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['status', 'solicitante', 'unit', 'delivered_by']
 
@@ -342,11 +348,16 @@ class DespachoViewSet(viewsets.ModelViewSet):
         headers = ['DV', 'Artículo', 'Código', 'Serial', 'Cantidad', 'Solicitante', 'Fecha']
         rows = []
         for linea in despacho.lineas.all():
+            serial_value = (
+                linea.item_unit.serial_number
+                if linea.item_unit
+                else (linea.item.numero_serie or '—')
+            )
             rows.append([
                 despacho.ot_number,
                 linea.item.name,
                 linea.item.code or '—',
-                linea.item_unit.serial_number if linea.item_unit else '—',
+                serial_value,
                 linea.quantity,
                 despacho.solicitante.name,
                 despacho.issued_at.strftime('%d/%m/%Y %H:%M'),
@@ -377,6 +388,16 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     ).prefetch_related('items', 'items__item', 'logs', 'logs__actor').all()
     serializer_class = ServiceOrderSerializer
     permission_classes = [permissions.IsAuthenticated, IsAssignedTechnicianOrAdmin]
+    view_permission_key = 'service_orders.view'
+    manage_permission_key = 'service_orders.manage'
+    permission_map_by_action = {
+        'report': 'reports.export',
+        'completion_receipt': 'reports.export',
+        'assign': 'service_orders.manage',
+        'transition': 'service_orders.manage',
+        'add_note': 'service_orders.manage',
+        'complete_service': 'service_orders.manage',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['service_type', 'status', 'assigned_technician', 'equipment_condition', 'unit']
 
@@ -405,6 +426,11 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if self.request.user.role not in ('admin', 'almacenista'):
             raise PermissionDenied('Solo administradores o almacenistas pueden crear órdenes de servicio.')
+        require_permission(
+            self.request.user,
+            'service_orders.manage',
+            'No tiene permisos para crear órdenes de servicio.',
+        )
         service_order = serializer.save(created_by=self.request.user)
         ServiceOrderLog.objects.create(
             service_order=service_order,
@@ -418,6 +444,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     def assign(self, request, pk=None):
         if request.user.role not in ('admin', 'almacenista'):
             return Response({'detail': 'Sin permisos para asignar técnicos.'}, status=status.HTTP_403_FORBIDDEN)
+        require_permission(request.user, 'service_orders.manage', 'Sin permisos para asignar técnicos.')
 
         service_order = self.get_object()
         technician_id = request.data.get('technician_id')

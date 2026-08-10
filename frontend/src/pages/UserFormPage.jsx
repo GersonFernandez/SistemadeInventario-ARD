@@ -171,7 +171,7 @@ export default function UserFormPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">ID de agente / Matrícula</label>
+            <label className="block text-sm font-medium text-gray-700">ID / ID militar</label>
             <input
               name="agent_id"
               value={formData.agent_id}

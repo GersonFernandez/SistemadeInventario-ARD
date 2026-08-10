@@ -53,6 +53,7 @@ from .serializers import (
     EntradaProductoBatchCreateSerializer,
 )
 from .permissions import IsAlmacenistaOrAdmin, IsAdminAlmacenistaOrTecnico
+from accounts.permissions import require_permission
 
 
 class ItemFilter(FilterSet):
@@ -70,12 +71,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'catalogs.view'
+    manage_permission_key = 'catalogs.manage'
 
 
 class BrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
     serializer_class = BrandSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'catalogs.view'
+    manage_permission_key = 'catalogs.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active']
 
@@ -95,6 +100,8 @@ class ProductModelViewSet(viewsets.ModelViewSet):
     queryset = ProductModel.objects.select_related('brand').all()
     serializer_class = ProductModelSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'catalogs.view'
+    manage_permission_key = 'catalogs.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active', 'brand']
 
@@ -111,6 +118,8 @@ class ProductStateViewSet(viewsets.ModelViewSet):
     queryset = ProductState.objects.all()
     serializer_class = ProductStateSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'catalogs.view'
+    manage_permission_key = 'catalogs.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active']
 
@@ -127,6 +136,8 @@ class UnitMeasureViewSet(viewsets.ModelViewSet):
     queryset = UnitMeasure.objects.all()
     serializer_class = UnitMeasureSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'catalogs.view'
+    manage_permission_key = 'catalogs.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_active']
 
@@ -143,12 +154,9 @@ class LocationTypeViewSet(viewsets.ModelViewSet):
     """CRUD de tipos de ubicación. Lectura abierta, escritura solo admin/almacenista."""
     queryset = LocationType.objects.all()
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'locations.view'
+    manage_permission_key = 'locations.manage'
     pagination_class = None
-
-    def get_permissions(self):
-        if self.action in ('list', 'retrieve'):
-            return [permissions.IsAuthenticated()]
-        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -188,6 +196,8 @@ class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.select_related('location_type', 'parent').all()
     serializer_class = LocationSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'locations.view'
+    manage_permission_key = 'locations.manage'
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -216,6 +226,13 @@ class LocationViewSet(viewsets.ModelViewSet):
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.select_related('category', 'location', 'brand', 'product_model', 'state').all()
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'products.view'
+    manage_permission_key = 'products.manage'
+    permission_map_by_action = {
+        'critical': 'inventory.view',
+        'report': 'reports.export',
+        'add_unit': 'products.manage',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemFilter
 
@@ -279,9 +296,7 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def report(self, request):
-        from rest_framework.exceptions import PermissionDenied
-        if request.user.role not in ('admin', 'almacenista'):
-            raise PermissionDenied('No tiene permisos para generar reportes.')
+        require_permission(request.user, 'reports.export', 'No tiene permisos para generar reportes.')
 
         format = request.query_params.get('type', 'pdf')
         if format not in ('pdf', 'excel'):
@@ -364,6 +379,8 @@ class StockMovementViewSet(viewsets.ModelViewSet):
     queryset = StockMovement.objects.select_related('item').all()
     serializer_class = StockMovementSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'inventory.view'
+    manage_permission_key = 'inventory.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['item', 'movement_type', 'document_type']
 
@@ -410,6 +427,8 @@ class TransferViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = TransferSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'inventory.view'
+    manage_permission_key = 'inventory.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_class = TransferFilter
 
@@ -431,11 +450,7 @@ class TransferViewSet(viewsets.ModelViewSet):
                 {'detail': 'Solo se pueden aprobar traslados pendientes.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if request.user.role not in ('admin', 'almacenista'):
-            return Response(
-                {'detail': 'No tiene permisos para aprobar traslados.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        require_permission(request.user, 'inventory.manage', 'No tiene permisos para aprobar traslados.')
         with transaction.atomic():
             item = Item.objects.select_for_update().get(pk=transfer.item.pk)
             transfer.status = Transfer.Status.COMPLETADA
@@ -454,11 +469,7 @@ class TransferViewSet(viewsets.ModelViewSet):
                 {'detail': 'Solo se pueden rechazar traslados pendientes.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if request.user.role not in ('admin', 'almacenista'):
-            return Response(
-                {'detail': 'No tiene permisos para rechazar traslados.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        require_permission(request.user, 'inventory.manage', 'No tiene permisos para rechazar traslados.')
         transfer.status = Transfer.Status.RECHAZADA
         transfer.approved_by = request.user
         transfer.completed_at = timezone.now()
@@ -480,6 +491,8 @@ class ItemUnitViewSet(viewsets.ModelViewSet):
     """Unidades físicas (con serial) de items con track_by_serial=True (típicamente herramientas)."""
     queryset = ItemUnit.objects.select_related('item').all()
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'inventory.view'
+    manage_permission_key = 'inventory.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemUnitFilter
 
@@ -609,6 +622,11 @@ class ItemLoanViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = ItemLoanSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'inventory.view'
+    manage_permission_key = 'inventory.manage'
+    permission_map_by_action = {
+        'report': 'reports.export',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['item_unit', 'loaned_to', 'loaned_to_user', 'loaned_by']
 
@@ -673,10 +691,7 @@ class ItemLoanViewSet(viewsets.ModelViewSet):
         - overdue: true|false (default: false). Filtra solo vencidos.
         """
         from datetime import datetime as dt
-        from rest_framework.exceptions import PermissionDenied
-
-        if request.user.role not in ('admin', 'almacenista'):
-            raise PermissionDenied('No tiene permisos para generar reportes.')
+        require_permission(request.user, 'reports.export', 'No tiene permisos para generar reportes.')
 
         fmt = request.query_params.get('type', 'pdf')
         if fmt not in ('pdf', 'excel'):
@@ -756,6 +771,8 @@ class RepairRecordViewSet(viewsets.ModelViewSet):
     queryset = RepairRecord.objects.select_related('item', 'technician').all()
     serializer_class = RepairRecordSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminAlmacenistaOrTecnico]
+    view_permission_key = 'service_orders.view'
+    manage_permission_key = 'service_orders.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['item', 'technician', 'is_active']
 
@@ -777,6 +794,8 @@ class InstallationRecordViewSet(viewsets.ModelViewSet):
     queryset = InstallationRecord.objects.select_related('item', 'technician', 'location').all()
     serializer_class = InstallationRecordSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminAlmacenistaOrTecnico]
+    view_permission_key = 'service_orders.view'
+    manage_permission_key = 'service_orders.manage'
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['item', 'technician', 'location', 'is_active']
 
@@ -862,18 +881,38 @@ class EntradaProductoFilter(FilterSet):
 
 class EntradaProductoViewSet(viewsets.ModelViewSet):
     queryset = EntradaProducto.objects.select_related(
-        'marca', 'modelo', 'categoria', 'ubicacion', 'registrado_por'
+        'marca', 'modelo', 'categoria', 'ubicacion', 'registrado_por', 'base_product'
     ).all()
     serializer_class = EntradaProductoSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    view_permission_key = 'reception.view'
+    manage_permission_key = 'reception.manage'
+    permission_map_by_action = {
+        'receipt': 'reports.export',
+        'history_report': 'reports.export',
+        'upload_signed_receipt': 'reception.manage',
+    }
     filter_backends = [DjangoFilterBackend]
     filterset_class = EntradaProductoFilter
 
     def get_queryset(self):
         queryset = super().get_queryset()
         reception_id = self.request.query_params.get('reception_id')
+        search = (self.request.query_params.get('search') or '').strip()
         if reception_id:
             queryset = queryset.filter(reception_id=reception_id)
+        if search:
+            queryset = queryset.filter(
+                Q(reception_id__icontains=search)
+                | Q(marca__name__icontains=search)
+                | Q(modelo__name__icontains=search)
+                | Q(categoria__name__icontains=search)
+                | Q(entregado_por_nombre__icontains=search)
+                | Q(entregado_por_apellido__icontains=search)
+                | Q(entregado_por_cedula__icontains=search)
+                | Q(entregado_por_rango_cargo__icontains=search)
+                | Q(observaciones__icontains=search)
+            )
         return queryset
 
     def perform_create(self, serializer):
@@ -995,9 +1034,10 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'No se encontraron líneas para esta recepción.'}, status=status.HTTP_404_NOT_FOUND)
 
         first = entries.first()
-        headers = ['Recepción', 'Fecha', 'Tipo', 'Marca', 'Modelo', 'Categoría', 'Cantidad', 'Seriales', 'Observaciones']
+        headers = ['Recepción', 'Fecha', 'Tipo', 'Marca', 'Modelo', 'Categoría', 'Cantidad', 'No. Serie', 'Observaciones']
         rows = []
         for entry in entries:
+            seriales_display = ', '.join(entry.seriales) if entry.seriales else (entry.base_product.numero_serie if entry.base_product and entry.base_product.numero_serie else '—')
             rows.append([
                 entry.reception_id,
                 entry.fecha_recepcion.strftime('%d/%m/%Y %H:%M'),
@@ -1006,7 +1046,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                 entry.modelo.name,
                 entry.categoria.name,
                 entry.cantidad,
-                ', '.join(entry.seriales) if entry.seriales else '—',
+                seriales_display,
                 entry.observaciones or '—',
             ])
 
@@ -1033,6 +1073,60 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             buffer,
             as_attachment=True,
             filename=f"recepcion_{reception_id}.{extension}",
+            content_type=content_type,
+        )
+
+    @action(detail=False, methods=['get'], url_path='history-report')
+    def history_report(self, request):
+        fmt = request.query_params.get('type', 'pdf')
+        if fmt not in ('pdf', 'excel'):
+            return Response({'detail': 'Formato inválido. Use pdf o excel.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = self.filter_queryset(self.get_queryset()).order_by('-fecha_recepcion', '-id')
+
+        headers = [
+            'Recepción', 'Fecha', 'Tipo', 'Marca', 'Modelo', 'Categoría',
+            'Cantidad', 'No. Serie', 'Ubicación', 'Entregado por', 'Cédula', 'Registrado por',
+        ]
+        rows = []
+        for entry in queryset:
+            entregado_por = f"{entry.entregado_por_nombre} {entry.entregado_por_apellido}".strip()
+            seriales_display = ', '.join(entry.seriales) if entry.seriales else (entry.base_product.numero_serie if entry.base_product and entry.base_product.numero_serie else '—')
+            rows.append([
+                entry.reception_id,
+                entry.fecha_recepcion.strftime('%d/%m/%Y %H:%M'),
+                entry.get_tipo_display(),
+                entry.marca.name,
+                entry.modelo.name,
+                entry.categoria.name,
+                entry.cantidad,
+                seriales_display,
+                entry.ubicacion.get_breadcrumb() if entry.ubicacion else '—',
+                entregado_por or '—',
+                entry.entregado_por_cedula or '—',
+                entry.registrado_por.name if entry.registrado_por else '—',
+            ])
+
+        if not rows:
+            rows = [['—', '—', '—', '—', '—', '—', 0, '—', '—', '—', '—', '—']]
+
+        metadata_lines = []
+        if request.query_params.get('tipo'):
+            metadata_lines.append(f"Tipo: {request.query_params.get('tipo')}")
+        if request.query_params.get('fecha_recepcion_after'):
+            metadata_lines.append(f"Desde: {request.query_params.get('fecha_recepcion_after')}")
+        if request.query_params.get('fecha_recepcion_before'):
+            metadata_lines.append(f"Hasta: {request.query_params.get('fecha_recepcion_before')}")
+        if request.query_params.get('search'):
+            metadata_lines.append(f"Búsqueda: {request.query_params.get('search')}")
+
+        buffer = build_report('Historial de Recepciones', headers, rows, fmt, metadata_lines=metadata_lines)
+        content_type = 'application/pdf' if fmt == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        extension = 'pdf' if fmt == 'pdf' else 'xlsx'
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f"historial_recepciones_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{extension}",
             content_type=content_type,
         )
 

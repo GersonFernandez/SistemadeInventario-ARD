@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { ArrowLeftIcon, XCircleIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { despachoApi } from '../services/workOrderApi'
 import { useAuth } from '../context/AuthContext'
+import { hasPermission } from '../utils/permissions'
 
 const stateStyles = {
   issued: 'bg-green-100 text-green-800',
@@ -14,6 +15,8 @@ export default function DespachoDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const canManage = hasPermission(user, 'despachos.manage', ['admin', 'almacenista'])
+  const canExport = hasPermission(user, 'reports.export', ['admin', 'almacenista', 'tecnico'])
   const [despacho, setDespacho] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -60,7 +63,7 @@ export default function DespachoDetailPage() {
   const canCancel = () => {
     if (!despacho) return false
     if (despacho.status === 'cancelled') return false
-    return user?.role === 'admin' || user?.role === 'almacenista'
+    return canManage
   }
 
   const handleDownloadReceipt = async () => {
@@ -97,13 +100,15 @@ export default function DespachoDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleDownloadReceipt}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <PrinterIcon className="h-4 w-4" />
-            Comprobante
-          </button>
+          {canExport && (
+            <button
+              onClick={handleDownloadReceipt}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <PrinterIcon className="h-4 w-4" />
+              Comprobante
+            </button>
+          )}
           <span
             className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
               stateStyles[despacho.status] || 'bg-gray-100 text-gray-800'

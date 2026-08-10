@@ -76,3 +76,137 @@ class SystemSetting(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(singleton_key='global')
         return obj
+
+
+class RolePermission(models.Model):
+    """Configuración de permisos por rol para módulos y acciones del sistema."""
+
+    PERMISSION_KEYS = (
+        'users.manage',
+        'roles.manage',
+        'inventory.view',
+        'inventory.manage',
+        'products.view',
+        'products.manage',
+        'service_orders.view',
+        'service_orders.manage',
+        'reception.view',
+        'reception.manage',
+        'despachos.view',
+        'despachos.manage',
+        'solicitantes.view',
+        'solicitantes.manage',
+        'locations.view',
+        'locations.manage',
+        'catalogs.view',
+        'catalogs.manage',
+        'audit.view',
+        'reports.export',
+    )
+
+    role = models.CharField(max_length=20, choices=User.Role.choices, unique=True)
+    permissions = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['role']
+        verbose_name = 'permiso por rol'
+        verbose_name_plural = 'permisos por rol'
+
+    def __str__(self):
+        return f"Permisos de {self.role}"
+
+    @classmethod
+    def default_permissions_for_role(cls, role):
+        base = {key: False for key in cls.PERMISSION_KEYS}
+
+        if role == User.Role.ADMIN:
+            return {key: True for key in cls.PERMISSION_KEYS}
+
+        if role == User.Role.ALMACENISTA:
+            allowed = {
+                'inventory.view',
+                'inventory.manage',
+                'products.view',
+                'products.manage',
+                'service_orders.view',
+                'service_orders.manage',
+                'reception.view',
+                'reception.manage',
+                'despachos.view',
+                'despachos.manage',
+                'solicitantes.view',
+                'solicitantes.manage',
+                'locations.view',
+                'locations.manage',
+                'catalogs.view',
+                'catalogs.manage',
+                'reports.export',
+            }
+            for key in allowed:
+                base[key] = True
+            return base
+
+        if role == User.Role.TECNICO:
+            allowed = {
+                'inventory.view',
+                'products.view',
+                'service_orders.view',
+                'service_orders.manage',
+                'solicitantes.view',
+            }
+            for key in allowed:
+                base[key] = True
+            return base
+
+        return base
+
+    @classmethod
+    def ensure_defaults(cls):
+        for role in User.Role.values:
+            obj, created = cls.objects.get_or_create(
+                role=role,
+                defaults={'permissions': cls.default_permissions_for_role(role)},
+            )
+            if created:
+                continue
+
+            changed = False
+            merged = dict(obj.permissions or {})
+            for key, value in cls.default_permissions_for_role(role).items():
+                if key not in merged:
+                    merged[key] = value
+                    changed = True
+
+            invalid_keys = [key for key in merged.keys() if key not in cls.PERMISSION_KEYS]
+            if invalid_keys:
+                for key in invalid_keys:
+                    merged.pop(key, None)
+                changed = True
+
+            if changed:
+                obj.permissions = merged
+                obj.save(update_fields=['permissions', 'updated_at'])
+
+    @classmethod
+    def get_permissions_for_role(cls, role):
+        """Return merged permissions for a role, falling back to defaults if row is missing."""
+        cls.ensure_defaults()
+        try:
+            obj = cls.objects.only('permissions').get(role=role)
+            merged = cls.default_permissions_for_role(role)
+            merged.update(obj.permissions or {})
+            return merged
+        except cls.DoesNotExist:
+            return cls.default_permissions_for_role(role)
+
+    @classmethod
+    def get_permissions_for_user(cls, user):
+        if not user or not getattr(user, 'is_authenticated', False):
+            return {}
+        return cls.get_permissions_for_role(user.role)
+
+    @classmethod
+    def has_user_permission(cls, user, permission_key):
+        return bool(cls.get_permissions_for_user(user).get(permission_key, False))

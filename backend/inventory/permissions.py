@@ -1,27 +1,16 @@
 from rest_framework import permissions
+from accounts.permissions import HasViewSetPermissionMatrix
 
 
-class IsAlmacenistaOrAdmin(permissions.BasePermission):
-    """Permite escritura solo a admin o almacenista. Técnicos solo lectura."""
+class IsAlmacenistaOrAdmin(HasViewSetPermissionMatrix):
+    """Matriz dinámica: lectura/escritura según claves configuradas en cada ViewSet."""
 
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        if request.method in permissions.SAFE_METHODS:
-            return True
-
-        return request.user.role in ('admin', 'almacenista')
+    default_view_permission_key = 'inventory.view'
+    default_manage_permission_key = 'inventory.manage'
 
 
-class IsAdminAlmacenistaOrTecnico(permissions.BasePermission):
-    """Permite escritura a admin, almacenista y técnico."""
+class IsAdminAlmacenistaOrTecnico(HasViewSetPermissionMatrix):
+    """Matriz dinámica para módulos técnicos de mantenimiento/instalación."""
 
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        if request.method in permissions.SAFE_METHODS:
-            return True
-
-        return request.user.role in ('admin', 'almacenista', 'tecnico')
+    default_view_permission_key = 'service_orders.view'
+    default_manage_permission_key = 'service_orders.manage'

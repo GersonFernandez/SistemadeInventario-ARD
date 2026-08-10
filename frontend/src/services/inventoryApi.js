@@ -112,6 +112,10 @@ export const inventoryApi = {
     params: { reception_id: receptionId, type: format },
     responseType: 'blob',
   }),
+  downloadProductEntryHistoryReport: (format = 'pdf', params = {}) => api.get('/inventory/product-entries/history-report/', {
+    params: { type: format, ...params },
+    responseType: 'blob',
+  }),
   uploadSignedReceipt: (receptionId, files = []) => {
     const formData = new FormData()
     formData.append('reception_id', receptionId)

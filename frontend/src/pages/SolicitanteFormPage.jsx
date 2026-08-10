@@ -5,6 +5,7 @@ import { solicitanteApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
 import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
+import { hasPermission } from '../utils/permissions'
 
 const emptyForm = {
   name: '',
@@ -19,7 +20,7 @@ export default function SolicitanteFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canManage = user?.role === 'admin' || user?.role === 'almacenista'
+  const canManage = hasPermission(user, 'solicitantes.manage', ['admin', 'almacenista'])
   const isEditing = Boolean(id)
 
   const [loading, setLoading] = useState(isEditing)

@@ -10,13 +10,14 @@ import {
 import { solicitanteApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
+import { hasPermission } from '../utils/permissions'
 
 const PAGE_SIZE = 25
 
 export default function SolicitantesPage() {
   const { user } = useAuth()
   const navigate  = useNavigate()
-  const canManage = user?.role === 'admin' || user?.role === 'almacenista'
+  const canManage = hasPermission(user, 'solicitantes.manage', ['admin', 'almacenista'])
 
   const [solicitantes, setSolicitantes] = useState([])
   const [locations, setLocations]       = useState([])

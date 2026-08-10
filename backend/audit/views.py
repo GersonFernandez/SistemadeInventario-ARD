@@ -3,6 +3,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import FilterSet, DateTimeFilter, CharFilter
 from .models import AuditLog
 from .serializers import AuditLogSerializer
+from accounts.permissions import HasPermissionKey
 
 
 class IsAdminOrAlmacenista(permissions.BasePermission):
@@ -28,6 +29,7 @@ class AuditLogFilter(FilterSet):
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.select_related('user').all()
     serializer_class = AuditLogSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrAlmacenista]
+    permission_classes = [permissions.IsAuthenticated, HasPermissionKey]
+    required_permission_key = 'audit.view'
     filter_backends = [DjangoFilterBackend]
     filterset_class = AuditLogFilter

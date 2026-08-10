@@ -5,7 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import SystemSetting
+from .models import SystemSetting, RolePermission
 
 User = get_user_model()
 
@@ -121,3 +121,28 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['user'] = UserSerializer(self.user).data
         data['session_timeout_minutes'] = SystemSetting.get_solo().session_timeout_minutes
         return data
+
+
+class RolePermissionSerializer(serializers.ModelSerializer):
+    role_label = serializers.CharField(source='get_role_display', read_only=True)
+
+    class Meta:
+        model = RolePermission
+        fields = ['id', 'role', 'role_label', 'permissions', 'updated_at']
+        read_only_fields = ['id', 'role', 'role_label', 'updated_at']
+
+    def validate_permissions(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('El campo permissions debe ser un objeto JSON.')
+
+        invalid_keys = [key for key in value.keys() if key not in RolePermission.PERMISSION_KEYS]
+        if invalid_keys:
+            raise serializers.ValidationError(f'Permisos no reconocidos: {", ".join(invalid_keys)}')
+
+        invalid_types = [key for key, item in value.items() if not isinstance(item, bool)]
+        if invalid_types:
+            raise serializers.ValidationError(f'Los permisos deben ser booleanos: {", ".join(invalid_types)}')
+
+        merged = RolePermission.default_permissions_for_role(self.instance.role if self.instance else User.Role.TECNICO)
+        merged.update(value)
+        return merged

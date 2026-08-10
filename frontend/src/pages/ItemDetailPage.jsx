@@ -16,6 +16,7 @@ import { inventoryApi, getMediaUrl } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
 import AuditHistoryTab from '../components/AuditHistoryTab'
 import BarcodeDisplay from '../components/BarcodeDisplay'
+import { hasPermission } from '../utils/permissions'
 
 const documentTypes = [
   { value: 'oficio', label: 'Oficio' },
@@ -36,7 +37,7 @@ export default function ItemDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const canEdit = user?.role === 'admin' || user?.role === 'almacenista'
+  const canEdit = hasPermission(user, 'products.manage', ['admin', 'almacenista'])
 
   const [item, setItem] = useState(null)
   const [movements, setMovements] = useState([])

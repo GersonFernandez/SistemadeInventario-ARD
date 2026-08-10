@@ -3,8 +3,15 @@ import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { PlusIcon, MagnifyingGlassIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { inventoryApi, getMediaUrl } from '../services/inventoryApi'
+import { downloadBlob } from '../utils/download'
+import { useAuth } from '../context/AuthContext'
+import { hasPermission } from '../utils/permissions'
 
 export default function ReceptionPage() {
+  const { user } = useAuth()
+  const canManage = hasPermission(user, 'reception.manage', ['admin', 'almacenista'])
+  const canExport = hasPermission(user, 'reports.export', ['admin', 'almacenista', 'tecnico'])
+
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -65,17 +72,55 @@ export default function ReceptionPage() {
     }
   }
 
+  const downloadHistoryReport = async (format = 'pdf') => {
+    try {
+      const params = {}
+      if (filters.tipo) params.tipo = filters.tipo
+      if (filters.from) params.fecha_recepcion_after = filters.from
+      if (filters.to) params.fecha_recepcion_before = filters.to
+      if (search.trim()) params.search = search.trim()
+
+      const response = await inventoryApi.downloadProductEntryHistoryReport(format, params)
+      const ext = format === 'pdf' ? 'pdf' : 'xlsx'
+      downloadBlob(response, `historial_recepciones_${new Date().toISOString().slice(0, 10)}.${ext}`)
+    } catch {
+      toast.error('No se pudo descargar el historial de recepciones')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Recepción de mercancía</h2>
-        <Link
-          to="/reception/new"
-          className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900"
-        >
-          <PlusIcon className="h-4 w-4" />
-          Nueva recepción
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {canExport && (
+            <>
+              <button
+                onClick={() => downloadHistoryReport('pdf')}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4" />
+                Historial PDF
+              </button>
+              <button
+                onClick={() => downloadHistoryReport('excel')}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4" />
+                Historial Excel
+              </button>
+            </>
+          )}
+          {canManage && (
+            <Link
+              to="/reception/new"
+              className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Nueva recepción
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">

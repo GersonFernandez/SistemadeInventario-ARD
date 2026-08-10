@@ -32,7 +32,6 @@ export default function ItemFormPage() {
   const [form, setForm] = useState({
     name: '',
     part_number: '',
-    numero_serie: '',
     category: '',
     brand: '',
     product_model: '',
@@ -100,7 +99,6 @@ export default function ItemFormPage() {
       setForm({
         name: data.name || '',
         part_number: data.part_number || '',
-        numero_serie: data.numero_serie || '',
         category: data.category || '',
         brand: data.brand || '',
         product_model: data.product_model || '',

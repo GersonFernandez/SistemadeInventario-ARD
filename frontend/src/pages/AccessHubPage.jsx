@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext'
 import { inventoryApi } from '../services/inventoryApi'
 import { serviceOrderApi } from '../services/serviceOrderApi'
 import { despachoApi } from '../services/workOrderApi'
+import { hasPermission } from '../utils/permissions'
 
 const roleLabels = {
   admin: 'Administrador',
@@ -25,8 +26,16 @@ const roleLabels = {
 
 export default function AccessHubPage() {
   const { user } = useAuth()
-  const isAdmin    = user?.role === 'admin'
-  const canOperate = user?.role === 'admin' || user?.role === 'almacenista'
+  const isAdmin = hasPermission(user, 'users.manage', ['admin'])
+  const canManageServiceOrders = hasPermission(user, 'service_orders.manage', ['admin', 'almacenista'])
+  const canManageReception = hasPermission(user, 'reception.manage', ['admin', 'almacenista'])
+  const canManageDespachos = hasPermission(user, 'despachos.manage', ['admin', 'almacenista'])
+  const canViewInventory = hasPermission(user, 'inventory.view', ['admin', 'almacenista', 'tecnico'])
+  const canViewServiceOrders = hasPermission(user, 'service_orders.view', ['admin', 'almacenista', 'tecnico'])
+  const canViewReception = hasPermission(user, 'reception.view', ['admin', 'almacenista'])
+  const canViewDespachos = hasPermission(user, 'despachos.view', ['admin', 'almacenista'])
+  const canViewProducts = hasPermission(user, 'products.view', ['admin', 'almacenista', 'tecnico'])
+  const canViewSolicitantes = hasPermission(user, 'solicitantes.view', ['admin', 'almacenista', 'tecnico'])
 
   const [stats, setStats]     = useState(null)
   const [loadingStats, setLoadingStats] = useState(true)
@@ -39,7 +48,7 @@ export default function AccessHubPage() {
           inventoryApi.getCriticalItems(),
           serviceOrderApi.getServiceOrders({ page_size: 1 }),
           serviceOrderApi.getServiceOrders({ status: 'en_proceso', page_size: 100 }),
-          canOperate ? despachoApi.getDespachos({ page_size: 1 }) : Promise.resolve(null),
+          canViewDespachos ? despachoApi.getDespachos({ page_size: 1 }) : Promise.resolve(null),
         ])
 
         setStats({
@@ -59,27 +68,27 @@ export default function AccessHubPage() {
   }, [])
 
   const quickActions = [
-    canOperate && { label: 'Nueva orden de servicio', to: '/service-orders/new', icon: PlusIcon,                  color: 'brand' },
-    canOperate && { label: 'Registrar recepción',     to: '/reception/new',      icon: InboxArrowDownIcon,        color: 'emerald' },
-    canOperate && { label: 'Crear despacho',          to: '/despachos/new',      icon: TruckIcon,                 color: 'indigo' },
-    { label: 'Ver inventario',            to: '/inventory',          icon: ChartBarIcon,              color: 'amber' },
+    canManageServiceOrders && { label: 'Nueva orden de servicio', to: '/service-orders/new', icon: PlusIcon,           color: 'brand' },
+    canManageReception && { label: 'Registrar recepción', to: '/reception/new', icon: InboxArrowDownIcon, color: 'emerald' },
+    canManageDespachos && { label: 'Crear despacho', to: '/despachos/new', icon: TruckIcon,                  color: 'indigo' },
+    canViewInventory && { label: 'Ver inventario', to: '/inventory', icon: ChartBarIcon, color: 'amber' },
   ].filter(Boolean)
 
   const moduleLinks = [
-    { label: 'Inventario',          desc: 'Stock, cantidades y estado del inventario',              to: '/inventory',       icon: ChartBarIcon,              roles: ['admin','almacenista','tecnico'] },
-    { label: 'Órdenes de servicio', desc: 'Reparaciones, instalaciones y mantenimientos',           to: '/service-orders',  icon: WrenchScrewdriverIcon,     roles: ['admin','almacenista','tecnico'] },
-    { label: 'Recepción',           desc: 'Entradas de mercancía con comprobante y firmas',         to: '/reception',       icon: InboxArrowDownIcon,        roles: ['admin','almacenista'] },
-    { label: 'Despachos',           desc: 'Salidas con trazabilidad por solicitante',               to: '/despachos',       icon: TruckIcon,                 roles: ['admin','almacenista'] },
-    { label: 'Productos',           desc: 'Catálogo técnico de productos base',                     to: '/products',        icon: CubeIcon,                  roles: ['admin','almacenista','tecnico'] },
-    { label: 'Solicitantes',        desc: 'Registro de personal y unidades solicitantes',           to: '/solicitantes',    icon: UsersIcon,                 roles: ['admin','almacenista','tecnico'] },
-    isAdmin && { label: 'Usuarios', desc: 'Gestión de cuentas, roles y contraseñas',               to: '/users',           icon: UsersIcon,                 roles: ['admin'] },
-  ].filter(Boolean).filter((m) => m.roles?.includes(user?.role))
+    canViewInventory && { label: 'Inventario', desc: 'Stock, cantidades y estado del inventario', to: '/inventory', icon: ChartBarIcon },
+    canViewServiceOrders && { label: 'Órdenes de servicio', desc: 'Reparaciones, instalaciones y mantenimientos', to: '/service-orders', icon: WrenchScrewdriverIcon },
+    canViewReception && { label: 'Recepción', desc: 'Entradas de mercancía con comprobante y firmas', to: '/reception', icon: InboxArrowDownIcon },
+    canViewDespachos && { label: 'Despachos', desc: 'Salidas con trazabilidad por solicitante', to: '/despachos', icon: TruckIcon },
+    canViewProducts && { label: 'Productos', desc: 'Catálogo técnico de productos base', to: '/products', icon: CubeIcon },
+    canViewSolicitantes && { label: 'Solicitantes', desc: 'Registro de personal y unidades solicitantes', to: '/solicitantes', icon: UsersIcon },
+    isAdmin && { label: 'Usuarios', desc: 'Gestión de cuentas, roles y contraseñas', to: '/users', icon: UsersIcon },
+  ].filter(Boolean)
 
   const statCards = [
     { label: 'Artículos en inventario', value: stats?.totalItems,   icon: CubeIcon,                  color: 'brand'   },
     { label: 'Stock crítico',           value: stats?.criticalItems, icon: ExclamationTriangleIcon,   color: 'red',    to: '/inventory' },
     { label: 'Órdenes activas',         value: stats?.activeOrders, icon: WrenchScrewdriverIcon,     color: 'amber',  to: '/service-orders?status=en_proceso' },
-    canOperate && { label: 'Despachos totales', value: stats?.totalDespachos, icon: TruckIcon, color: 'indigo', to: '/despachos' },
+    canViewDespachos && { label: 'Despachos totales', value: stats?.totalDespachos, icon: TruckIcon, color: 'indigo', to: '/despachos' },
   ].filter(Boolean)
 
   return (

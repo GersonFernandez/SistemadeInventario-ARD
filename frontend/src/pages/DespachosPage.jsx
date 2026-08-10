@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import { PlusIcon, MagnifyingGlassIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { despachoApi } from '../services/workOrderApi'
 import { downloadBlob } from '../utils/download'
+import { useAuth } from '../context/AuthContext'
+import { hasPermission } from '../utils/permissions'
 
 const statusColors = {
   issued: 'bg-green-100 text-green-800',
@@ -11,6 +13,10 @@ const statusColors = {
 }
 
 export default function DespachosPage() {
+  const { user } = useAuth()
+  const canManage = hasPermission(user, 'despachos.manage', ['admin', 'almacenista'])
+  const canExport = hasPermission(user, 'reports.export', ['admin', 'almacenista', 'tecnico'])
+
   const [despachos, setDespachos] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -68,30 +74,37 @@ export default function DespachosPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Despachos</h2>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleDownloadReport('pdf')}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <DocumentArrowDownIcon className="h-4 w-4" />
-            PDF
-          </button>
-          <button
-            onClick={() => handleDownloadReport('excel')}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <DocumentArrowDownIcon className="h-4 w-4" />
-            Excel
-          </button>
-          <Link
-            to="/despachos/new"
-            className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Nuevo Despacho
-          </Link>
+          {canExport && (
+            <>
+              <button
+                onClick={() => handleDownloadReport('pdf')}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4" />
+                PDF
+              </button>
+              <button
+                onClick={() => handleDownloadReport('excel')}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4" />
+                Excel
+              </button>
+            </>
+          )}
+          {canManage && (
+            <Link
+              to="/despachos/new"
+              className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Nuevo Despacho
+            </Link>
+          )}
         </div>
       </div>
 
+      {canExport && (
       <div className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -132,6 +145,7 @@ export default function DespachosPage() {
           </div>
         </div>
       </div>
+      )}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="relative flex-1">

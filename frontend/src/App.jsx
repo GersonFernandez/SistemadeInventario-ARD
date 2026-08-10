@@ -3,8 +3,9 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import appRoutes from './config/routes'
+import { hasPermission } from './utils/permissions'
 
-function ProtectedRoute({ children, allowedRoles = [] }) {
+function ProtectedRoute({ children, allowedRoles = [], permissionKey }) {
   const { user, loading } = useAuth()
   const location = useLocation()
 
@@ -28,6 +29,10 @@ function ProtectedRoute({ children, allowedRoles = [] }) {
     return <Navigate to="/" replace />
   }
 
+  if (!hasPermission(user, permissionKey, allowedRoles)) {
+    return <Navigate to="/" replace />
+  }
+
   return <Layout>{children}</Layout>
 }
 
@@ -36,7 +41,7 @@ export default function App() {
     <Routes>
       {appRoutes.map((route) => {
         const element = route.publicRoute ? route.element : (
-          <ProtectedRoute allowedRoles={route.allowedRoles || []}>
+          <ProtectedRoute allowedRoles={route.allowedRoles || []} permissionKey={route.permissionKey}>
             {route.element}
           </ProtectedRoute>
         )

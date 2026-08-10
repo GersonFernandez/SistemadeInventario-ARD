@@ -10,6 +10,7 @@ import {
 import { serviceOrderApi } from '../services/serviceOrderApi'
 import { useAuth } from '../context/AuthContext'
 import { downloadBlob } from '../utils/download'
+import { hasPermission } from '../utils/permissions'
 
 const statusColors = {
   recibido:           'bg-blue-100 text-blue-800',
@@ -29,7 +30,8 @@ const serviceTypeLabels = {
 
 export default function ServiceOrdersPage() {
   const { user } = useAuth()
-  const canCreate = user?.role === 'admin' || user?.role === 'almacenista'
+  const canCreate = hasPermission(user, 'service_orders.manage', ['admin', 'almacenista'])
+  const canExport = hasPermission(user, 'reports.export', ['admin', 'almacenista', 'tecnico'])
 
   const [orders, setOrders]             = useState([])
   const [loading, setLoading]           = useState(true)
@@ -108,30 +110,32 @@ export default function ServiceOrdersPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Report dropdown */}
-          <div className="relative" data-report-menu>
-            <button
-              onClick={() => setShowReportMenu((s) => !s)}
-              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <DocumentArrowDownIcon className="h-4 w-4" />
-              Exportar
-              <ChevronDownIcon className="h-3 w-3" />
-            </button>
-            {showReportMenu && (
-              <div className="absolute right-0 mt-1 w-52 rounded-xl border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
-                <p className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-b border-gray-100">
-                  {typeFilter ? serviceTypeLabels[typeFilter] : 'Todos los tipos'}
-                  {statusFilter ? ` · ${statusFilter}` : ''}
-                </p>
-                <button onClick={() => handleDownloadReport('pdf')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">
-                  PDF
-                </button>
-                <button onClick={() => handleDownloadReport('excel')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">
-                  Excel
-                </button>
-              </div>
-            )}
-          </div>
+          {canExport && (
+            <div className="relative" data-report-menu>
+              <button
+                onClick={() => setShowReportMenu((s) => !s)}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4" />
+                Exportar
+                <ChevronDownIcon className="h-3 w-3" />
+              </button>
+              {showReportMenu && (
+                <div className="absolute right-0 mt-1 w-52 rounded-xl border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
+                  <p className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-b border-gray-100">
+                    {typeFilter ? serviceTypeLabels[typeFilter] : 'Todos los tipos'}
+                    {statusFilter ? ` · ${statusFilter}` : ''}
+                  </p>
+                  <button onClick={() => handleDownloadReport('pdf')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">
+                    PDF
+                  </button>
+                  <button onClick={() => handleDownloadReport('excel')} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">
+                    Excel
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {canCreate && (
             <Link

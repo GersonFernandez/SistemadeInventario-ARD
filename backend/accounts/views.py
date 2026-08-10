@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.utils.crypto import get_random_string
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import SystemSetting
+from .models import SystemSetting, RolePermission
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -14,8 +14,9 @@ from .serializers import (
     PasswordChangeSerializer,
     AdminResetPasswordSerializer,
     SystemSettingSerializer,
+    RolePermissionSerializer,
 )
-from .permissions import IsAdmin
+from .permissions import HasPermissionKey, require_permission
 
 User = get_user_model()
 
@@ -39,8 +40,10 @@ class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        RolePermission.ensure_defaults()
         data = UserSerializer(request.user).data
         data['session_timeout_minutes'] = SystemSetting.get_solo().session_timeout_minutes
+        data['permissions'] = RolePermission.get_permissions_for_user(request.user)
         return Response(data)
 
 
@@ -69,7 +72,8 @@ class PasswordChangeView(APIView):
 
 
 class AdminResetPasswordView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    permission_classes = [permissions.IsAuthenticated, HasPermissionKey]
+    required_permission_key = 'users.manage'
 
     def post(self, request):
         serializer = AdminResetPasswordSerializer(data=request.data)
@@ -108,8 +112,11 @@ class SystemSettingView(APIView):
         return Response(SystemSettingSerializer(setting).data)
 
     def put(self, request):
-        if request.user.role != 'admin':
-            return Response({'detail': 'Solo administradores pueden modificar la configuración.'}, status=status.HTTP_403_FORBIDDEN)
+        require_permission(
+            request.user,
+            'users.manage',
+            'Solo usuarios con permisos de gestión pueden modificar la configuración.',
+        )
         setting = SystemSetting.get_solo()
         serializer = SystemSettingSerializer(setting, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -119,7 +126,8 @@ class SystemSettingView(APIView):
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
-    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    permission_classes = [permissions.IsAuthenticated, HasPermissionKey]
+    required_permission_key = 'users.manage'
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -129,3 +137,14 @@ class UserViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active'])
+
+
+class RolePermissionViewSet(viewsets.ModelViewSet):
+    serializer_class = RolePermissionSerializer
+    permission_classes = [permissions.IsAuthenticated, HasPermissionKey]
+    required_permission_key = 'roles.manage'
+    http_method_names = ['get', 'put', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        RolePermission.ensure_defaults()
+        return RolePermission.objects.all().order_by('role')
