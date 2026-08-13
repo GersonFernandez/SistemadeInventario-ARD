@@ -11,7 +11,7 @@ import {
   ClipboardDocumentListIcon,
   PaperClipIcon,
 } from '@heroicons/react/24/outline'
-import { inventoryApi } from '../services/inventoryApi'
+import { inventoryApi, getMediaUrl } from '../services/inventoryApi'
 import ProductPickerField from '../components/ProductPickerField'
 import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 
@@ -51,6 +51,7 @@ export default function ReceptionFormPage() {
   const [lastSavedId, setLastSavedId] = useState(null)
   const [signedReceiptFiles, setSignedReceiptFiles] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadedSignedAttachments, setUploadedSignedAttachments] = useState([])
 
   useEffect(() => {
     loadCatalogs()
@@ -129,14 +130,39 @@ export default function ReceptionFormPage() {
     }
     setUploading(true)
     try {
-      await inventoryApi.uploadSignedReceipt(lastSavedId, signedReceiptFiles)
+      const { data } = await inventoryApi.uploadSignedReceipt(lastSavedId, signedReceiptFiles)
       toast.success('Comprobante firmado cargado')
       setSignedReceiptFiles([])
+      const uploaded = (data?.adjuntos || []).filter((a) => a.attachment_type === 'comprobante_firmado')
+      setUploadedSignedAttachments((prev) => [...uploaded, ...prev])
     } catch {
       toast.error('No se pudo subir el comprobante firmado')
     } finally {
       setUploading(false)
     }
+  }
+
+  const loadSignedAttachments = async (receptionId) => {
+    try {
+      const { data } = await inventoryApi.getProductEntryAttachments(receptionId, { attachment_type: 'comprobante_firmado' })
+      setUploadedSignedAttachments(data?.adjuntos || [])
+    } catch {
+      setUploadedSignedAttachments([])
+    }
+  }
+
+  const downloadSignedAttachment = (attachment) => {
+    const filePath = attachment.file_url || attachment.file
+    if (!filePath) {
+      toast.error('El archivo firmado no es descargable')
+      return
+    }
+    const anchor = document.createElement('a')
+    anchor.href = getMediaUrl(filePath)
+    anchor.target = '_blank'
+    anchor.rel = 'noopener noreferrer'
+    anchor.download = `comprobante_firmado_${lastSavedId || 'recepcion'}_${attachment.id}`
+    anchor.click()
   }
 
   const submit = async () => {
@@ -190,6 +216,7 @@ export default function ReceptionFormPage() {
       toast.success(`Recepción registrada: ${data.reception_id}`)
       setLastSavedId(data.reception_id)
       await downloadReceipt(data.reception_id)
+      await loadSignedAttachments(data.reception_id)
       setFechaRecepcion(new Date().toISOString().slice(0, 16))
       setObservaciones('')
       setEntregadoPorNombre('')
@@ -502,6 +529,21 @@ export default function ReceptionFormPage() {
               >
                 {uploading ? 'Subiendo…' : 'Subir firmado'}
               </button>
+              {uploadedSignedAttachments.length > 0 && (
+                <div className="space-y-1 rounded-md border border-emerald-200 bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Comprobantes firmados cargados</p>
+                  {uploadedSignedAttachments.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => downloadSignedAttachment(attachment)}
+                      className="block w-full text-left text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                    >
+                      Descargar firmado #{attachment.id}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </aside>

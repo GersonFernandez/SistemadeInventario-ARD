@@ -5,6 +5,7 @@ import {
   MagnifyingGlassIcon,
   ExclamationTriangleIcon,
   DocumentArrowDownIcon,
+  PrinterIcon,
   WrenchScrewdriverIcon,
   CubeIcon,
   FunnelIcon,
@@ -46,6 +47,7 @@ export default function InventoryPage() {
   const [filterCategory,  setFilterCategory]  = useState('')
   const [filterLocation,  setFilterLocation]  = useState('')
   const [filterKind,      setFilterKind]      = useState('')
+  const [filterCritical,  setFilterCritical]  = useState('')
   const [filterStatus,    setFilterStatus]    = useState('active') // active | inactive | all
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
@@ -78,6 +80,7 @@ export default function InventoryPage() {
       if (filterCategory)     params.category = filterCategory
       if (filterLocation)     params.location = filterLocation
       if (filterKind)         params.kind     = filterKind
+      if (filterCritical)     params.critical = filterCritical
       if (filterStatus === 'active')   params.is_active = 'true'
       if (filterStatus === 'inactive') params.is_active = 'false'
 
@@ -103,18 +106,18 @@ export default function InventoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, filterCategory, filterLocation, filterKind, filterStatus])
+  }, [search, filterCategory, filterLocation, filterKind, filterCritical, filterStatus])
 
   // re-fetch when filters change
   useEffect(() => {
     setPage(1)
     fetchItems(1)
-  }, [filterCategory, filterLocation, filterKind, filterStatus])
+  }, [filterCategory, filterLocation, filterKind, filterCritical, filterStatus])
 
   const handleSearch = () => { setPage(1); fetchItems(1) }
   const handleReset  = () => {
     setSearch(''); setFilterCategory(''); setFilterLocation('')
-    setFilterKind(''); setFilterStatus('active')
+    setFilterKind(''); setFilterCritical(''); setFilterStatus('active')
     setPage(1); fetchItems(1)
   }
   const handlePage = (dir) => {
@@ -130,6 +133,7 @@ export default function InventoryPage() {
       if (filterCategory) activeFilters.category = filterCategory
       if (filterLocation) activeFilters.location = filterLocation
       if (filterKind) activeFilters.kind = filterKind
+      if (filterCritical) activeFilters.critical = filterCritical
       if (filterStatus === 'active') activeFilters.is_active = 'true'
       if (filterStatus === 'inactive') activeFilters.is_active = 'false'
 
@@ -138,6 +142,31 @@ export default function InventoryPage() {
       downloadBlob(response, `inventario_${suffix}_${new Date().toISOString().slice(0, 10)}.${ext}`)
     } catch {
       toast.error('No se pudo generar el reporte')
+    }
+  }
+
+  const handleLocationExport = async (format) => {
+    if (!filterLocation) {
+      toast.error('Seleccione una ubicación para exportar su reporte.')
+      return
+    }
+    const locationName = locations.find((l) => String(l.id) === String(filterLocation))?.name || 'ubicacion'
+    await handleDownload(format, { location: filterLocation }, `ubicacion_${locationName.replace(/\s+/g, '_').toLowerCase()}`)
+  }
+
+  const handlePrintCompleteInventory = async () => {
+    try {
+      const response = await inventoryApi.downloadInventoryReport('pdf', {})
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const printWindow = window.open(url, '_blank')
+      if (!printWindow) {
+        toast.error('Habilite ventanas emergentes para imprimir el inventario.')
+        return
+      }
+      printWindow.addEventListener('load', () => printWindow.print())
+    } catch {
+      toast.error('No se pudo preparar la impresión del inventario completo')
     }
   }
 
@@ -193,10 +222,20 @@ export default function InventoryPage() {
                     <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-y border-gray-100">Herramientas</div>
                     <button onClick={() => { handleDownload('pdf', { kind: 'herramienta' }, 'herramientas'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF herramientas</button>
                     <button onClick={() => { handleDownload('excel', { kind: 'herramienta' }, 'herramientas'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel herramientas</button>
+                    <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-y border-gray-100">Por ubicación</div>
+                    <button onClick={() => { handleLocationExport('pdf'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF ubicación seleccionada</button>
+                    <button onClick={() => { handleLocationExport('excel'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel ubicación seleccionada</button>
                   </div>
                 )}
               </div>
             )}
+            <button
+              onClick={handlePrintCompleteInventory}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/20"
+            >
+              <PrinterIcon className="h-4 w-4" />
+              Imprimir inventario completo
+            </button>
           </div>
         </div>
       </div>
@@ -204,7 +243,7 @@ export default function InventoryPage() {
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Total en página" value={items.length} sub={`de ${totalCount}`} color="brand" icon={CubeIcon} />
-        <StatCard label="Stock crítico" value={criticalCount} color="red" icon={ExclamationTriangleIcon} clickable onClick={() => setFilterStatus('active')} />
+        <StatCard label="Stock crítico" value={criticalCount} color="red" icon={ExclamationTriangleIcon} clickable onClick={() => { setFilterStatus('active'); setFilterCritical('true') }} />
         <StatCard label="Herramientas" value={toolCount} color="indigo" icon={WrenchScrewdriverIcon} clickable onClick={() => setFilterKind('herramienta')} />
         <StatCard label="Consumibles" value={consumCount} color="emerald" icon={CubeIcon} clickable onClick={() => setFilterKind('consumible')} />
       </div>
@@ -235,6 +274,11 @@ export default function InventoryPage() {
             <option value="">Todos los tipos</option>
             <option value="consumible">Consumibles / Repuestos</option>
             <option value="herramienta">Herramientas / Instrumentos</option>
+          </select>
+          <select value={filterCritical} onChange={(e) => setFilterCritical(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
+            <option value="">Todos (críticos y no críticos)</option>
+            <option value="true">Solo stock crítico</option>
+            <option value="false">Excluir stock crítico</option>
           </select>
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
             <option value="active">Solo activos</option>

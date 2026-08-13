@@ -49,10 +49,12 @@ export default function ReceptionPage() {
       fecha: rows[0]?.fecha_recepcion,
       ubicacion: rows[0]?.ubicacion_breadcrumb || rows[0]?.ubicacion_name || '—',
       entregadoPor: `${rows[0]?.entregado_por_nombre || ''} ${rows[0]?.entregado_por_apellido || ''}`.trim() || '—',
+      recibidoPor: rows[0]?.registrado_por_name || '—',
       rangoCargo: rows[0]?.entregado_por_rango_cargo || '',
       lineas: rows.length,
       totalItems: rows.reduce((s, r) => s + Number(r.cantidad || 0), 0),
       adjuntos: rows[0]?.adjuntos || [],
+      comprobantesFirmados: (rows[0]?.adjuntos || []).filter((a) => a.attachment_type === 'comprobante_firmado'),
       rows,
     })).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
   }, [history])
@@ -70,6 +72,22 @@ export default function ReceptionPage() {
     } catch {
       toast.error('No se pudo descargar el comprobante')
     }
+  }
+
+  const downloadSignedAttachment = (attachment, receptionId) => {
+    const filePath = attachment.file_url || attachment.file
+    if (!filePath) {
+      toast.error('El adjunto firmado no tiene una URL válida')
+      return
+    }
+
+    const url = getMediaUrl(filePath)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.target = '_blank'
+    anchor.rel = 'noopener noreferrer'
+    anchor.download = `comprobante_firmado_${receptionId}_${attachment.id}`
+    anchor.click()
   }
 
   const downloadHistoryReport = async (format = 'pdf') => {
@@ -177,43 +195,56 @@ export default function ReceptionPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Recepción</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Fecha</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Ubicación</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Entregado por</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Líneas</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Total und</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Acciones</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Recepción</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Fecha</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Ubicación</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Entregado por</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Recibido por</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Líneas</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Total und</th>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {groupedHistory.map((g) => (
                 <tr key={g.receptionId} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-brand-800">{g.receptionId}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-3 py-2 text-sm font-medium text-brand-800">{g.receptionId}</td>
+                  <td className="px-3 py-2 text-sm text-gray-500">
                     {g.fecha ? new Date(g.fecha).toLocaleDateString('es-DO') : '—'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{g.ubicacion}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
+                  <td className="px-3 py-2 text-sm text-gray-900">{g.ubicacion}</td>
+                  <td className="px-3 py-2 text-sm text-gray-900">
                     {g.entregadoPor}
                     {g.rangoCargo && <span className="ml-1 text-xs text-gray-400">({g.rangoCargo})</span>}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{g.lineas}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{g.totalItems}</td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => downloadReceipt(g.receptionId)}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-900"
-                    >
-                      <DocumentArrowDownIcon className="h-4 w-4" />
-                      Comprobante
-                    </button>
+                  <td className="px-3 py-2 text-sm text-gray-900">{g.recibidoPor}</td>
+                  <td className="px-3 py-2 text-sm text-gray-900">{g.lineas}</td>
+                  <td className="px-3 py-2 text-sm text-gray-900">{g.totalItems}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => downloadReceipt(g.receptionId)}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-900"
+                      >
+                        <DocumentArrowDownIcon className="h-4 w-4" />
+                        Comprobante
+                      </button>
+                      {g.comprobantesFirmados.length > 0 && (
+                        <button
+                          onClick={() => downloadSignedAttachment(g.comprobantesFirmados[0], g.receptionId)}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-900"
+                        >
+                          <DocumentArrowDownIcon className="h-4 w-4" />
+                          Firmado
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
               {groupedHistory.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
+                  <td colSpan={8} className="px-6 py-8 text-center text-sm text-gray-500">
                     No se encontraron recepciones.
                   </td>
                 </tr>

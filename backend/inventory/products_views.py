@@ -1,6 +1,7 @@
 from django.db.models import Q
 from rest_framework import viewsets, permissions
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter
 
 from .models import Category, Brand, ProductModel, ProductState, Location, Item, UnitMeasure
 from .serializers import (
@@ -26,8 +27,9 @@ class ProductBrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
     serializer_class = BrandSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['is_active']
+    search_fields = ['name', 'description']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -42,8 +44,9 @@ class ProductModelViewSet(viewsets.ModelViewSet):
     queryset = ProductModel.objects.select_related('brand').all()
     serializer_class = ProductModelSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['is_active', 'brand']
+    search_fields = ['name', 'description', 'brand__name']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -58,8 +61,9 @@ class ProductStateViewSet(viewsets.ModelViewSet):
     queryset = ProductState.objects.all()
     serializer_class = ProductStateSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['is_active']
+    search_fields = ['name', 'code', 'description']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -74,8 +78,9 @@ class ProductUnitMeasureViewSet(viewsets.ModelViewSet):
     queryset = UnitMeasure.objects.all()
     serializer_class = UnitMeasureSerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['is_active']
+    search_fields = ['name', 'code', 'description']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -121,6 +126,10 @@ class ProductItemViewSet(viewsets.ModelViewSet):
         category = serializer.validated_data.get('category')
         code = self._generate_code(category)
         serializer.save(code=code, is_base_product=True)
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
 
     def _generate_code(self, category):
         last_item = Item.objects.filter(category=category).order_by('code').last()

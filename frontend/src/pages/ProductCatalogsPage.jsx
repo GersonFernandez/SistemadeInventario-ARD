@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { MagnifyingGlassIcon, XMarkIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { productApi } from '../services/productApi'
@@ -24,6 +24,7 @@ const initialCatalogState = {
 }
 
 export default function ProductCatalogsPage() {
+  const searchDebounceTimers = useRef({})
   const [activeCatalog, setActiveCatalog] = useState('brand')
   const [catalogs, setCatalogs] = useState({
     brand: { ...initialCatalogState },
@@ -44,6 +45,9 @@ export default function ProductCatalogsPage() {
     loadCatalog('model', 1)
     loadCatalog('state', 1)
     loadCatalog('unit', 1)
+    return () => {
+      Object.values(searchDebounceTimers.current).forEach((timerId) => clearTimeout(timerId))
+    }
   }, [])
 
   const updateCatalogState = (type, patch) => {
@@ -53,12 +57,12 @@ export default function ProductCatalogsPage() {
     }))
   }
 
-  const loadCatalog = async (type, page = 1) => {
+  const loadCatalog = async (type, page = 1, overrides = {}) => {
     const pageSize = 8
     const state = catalogs[type] ?? initialCatalogState
-    const currentSearch = state.search || ''
-    const currentStatus = state.filterStatus || ''
-    const currentBrand  = state.filterBrand  || ''
+    const currentSearch = overrides.search ?? state.search ?? ''
+    const currentStatus = overrides.filterStatus ?? state.filterStatus ?? ''
+    const currentBrand  = overrides.filterBrand ?? state.filterBrand ?? ''
 
     updateCatalogState(type, { loading: true })
 
@@ -238,24 +242,46 @@ export default function ProductCatalogsPage() {
   const activeCatalogState = catalogs[activeCatalog]
   const brandOptions = catalogs.brand.items.filter((brand) => brand.is_active)
 
+  const applyCatalogFilters = (type, patch, page = 1) => {
+    const current = catalogs[type] ?? initialCatalogState
+    const merged = {
+      search: patch.search ?? current.search ?? '',
+      filterStatus: patch.filterStatus ?? current.filterStatus ?? '',
+      filterBrand: patch.filterBrand ?? current.filterBrand ?? '',
+    }
+    updateCatalogState(type, merged)
+    loadCatalog(type, page, merged)
+  }
+
   const handleSearchChange = (value) => {
+    const current = catalogs[activeCatalog] ?? initialCatalogState
+    const merged = {
+      search: value,
+      filterStatus: current.filterStatus ?? '',
+      filterBrand: current.filterBrand ?? '',
+    }
+
     updateCatalogState(activeCatalog, { search: value })
-    loadCatalog(activeCatalog, 1)
+
+    if (searchDebounceTimers.current[activeCatalog]) {
+      clearTimeout(searchDebounceTimers.current[activeCatalog])
+    }
+
+    searchDebounceTimers.current[activeCatalog] = setTimeout(() => {
+      loadCatalog(activeCatalog, 1, merged)
+    }, 350)
   }
 
   const handleStatusFilterChange = (value) => {
-    updateCatalogState(activeCatalog, { filterStatus: value })
-    loadCatalog(activeCatalog, 1)
+    applyCatalogFilters(activeCatalog, { filterStatus: value }, 1)
   }
 
   const handleBrandFilterChange = (value) => {
-    updateCatalogState(activeCatalog, { filterBrand: value })
-    loadCatalog(activeCatalog, 1)
+    applyCatalogFilters(activeCatalog, { filterBrand: value }, 1)
   }
 
   const handleClearFilters = () => {
-    updateCatalogState(activeCatalog, { search: '', filterStatus: '', filterBrand: '' })
-    loadCatalog(activeCatalog, 1)
+    applyCatalogFilters(activeCatalog, { search: '', filterStatus: '', filterBrand: '' }, 1)
   }
 
   const handlePageChange = (direction) => {
@@ -435,7 +461,7 @@ function CatalogTable({
             className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-2 text-sm outline-none focus:border-brand-700 focus:ring-2 focus:ring-brand-100"
           />
           {searchValue && (
-            <button onClick={() => onSearchChange('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button type="button" onClick={() => onSearchChange('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               <XMarkIcon className="h-4 w-4" />
             </button>
           )}
@@ -469,6 +495,7 @@ function CatalogTable({
         {/* Clear button */}
         {hasActiveFilters && (
           <button
+            type="button"
             onClick={onClearFilters}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
           >
@@ -531,8 +558,8 @@ function CatalogTable({
                     placeholder="Descripción"
                   />
                   <div className="flex gap-2">
-                    <button onClick={saveEditing} className="rounded bg-brand-800 px-2 py-1.5 text-xs font-semibold text-white">Guardar</button>
-                    <button onClick={cancelEditing} className="rounded border border-gray-300 px-2 py-1.5 text-xs">Cancelar</button>
+                    <button type="button" onClick={saveEditing} className="rounded bg-brand-800 px-2 py-1.5 text-xs font-semibold text-white">Guardar</button>
+                    <button type="button" onClick={cancelEditing} className="rounded border border-gray-300 px-2 py-1.5 text-xs">Cancelar</button>
                   </div>
                 </div>
               ) : (
@@ -545,10 +572,11 @@ function CatalogTable({
                     </p>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <button onClick={() => startEditing(r)} className="text-xs font-medium text-brand-700 hover:text-brand-900">
+                    <button type="button" onClick={() => startEditing(r)} className="text-xs font-medium text-brand-700 hover:text-brand-900">
                       Editar
                     </button>
                     <button
+                      type="button"
                       onClick={() => toggle(r.id, r.is_active)}
                       className={`text-xs font-medium ${r.is_active ? 'text-red-600 hover:text-red-800' : 'text-emerald-600 hover:text-emerald-800'}`}
                     >
@@ -565,6 +593,7 @@ function CatalogTable({
 
       <div className="mt-4 flex items-center justify-between gap-2">
         <button
+          type="button"
           onClick={() => onPageChange(-1)}
           disabled={page <= 1}
           className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -573,6 +602,7 @@ function CatalogTable({
         </button>
         <span className="text-sm text-gray-500">Página {page}</span>
         <button
+          type="button"
           onClick={() => onPageChange(1)}
           disabled={page >= totalPages}
           className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"

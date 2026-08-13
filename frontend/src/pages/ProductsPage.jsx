@@ -80,7 +80,7 @@ export default function ProductsPage() {
     setLoading(true)
     try {
       const [p, c, b, m, s, u, l] = await Promise.all([
-        productApi.getItems({ page_size: 200 }),
+        productApi.getItems({ page_size: 200, is_active: '' }),
         productApi.getCategories(),
         productApi.getBrands({ is_active: true }),
         productApi.getProductModels({ is_active: true }),
@@ -103,14 +103,19 @@ export default function ProductsPage() {
     }
   }
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (overrides = {}) => {
     setLoading(true)
     try {
+      const effectiveSearch = overrides.search ?? search
+      const effectiveCategory = overrides.filterCategory ?? filterCategory
+      const effectiveKind = overrides.filterKind ?? filterKind
+      const effectiveStatus = overrides.filterStatus ?? filterStatus
+
       const params = { page_size: 200 }
-      if (search.trim())  params.search   = search.trim()
-      if (filterCategory) params.category = filterCategory
-      if (filterKind)     params.kind     = filterKind
-      if (filterStatus)   params.is_active = filterStatus
+      if (effectiveSearch.trim())  params.search   = effectiveSearch.trim()
+      if (effectiveCategory) params.category = effectiveCategory
+      if (effectiveKind)     params.kind     = effectiveKind
+      if (effectiveStatus)   params.is_active = effectiveStatus
       const { data } = await productApi.getItems(params)
       setProducts(data.results ?? data)
     } catch {
@@ -130,15 +135,24 @@ export default function ProductsPage() {
     }
   }
 
+  const handleClearFilters = () => {
+    const cleared = {
+      search: '',
+      filterCategory: '',
+      filterKind: '',
+      filterStatus: '',
+    }
+    setSearch(cleared.search)
+    setFilterCategory(cleared.filterCategory)
+    setFilterKind(cleared.filterKind)
+    setFilterStatus(cleared.filterStatus)
+    fetchProducts(cleared)
+  }
+
   const toggleProduct = async (id, isActive) => {
     try {
-      if (isActive) {
-        await productApi.deleteItem(id)
-        toast.success('Producto deshabilitado')
-      } else {
-        await productApi.updateItem(id, { is_active: true })
-        toast.success('Producto habilitado')
-      }
+      await productApi.updateItem(id, { is_active: !isActive })
+      toast.success(isActive ? 'Producto deshabilitado' : 'Producto habilitado')
       loadAll()
     } catch {
       toast.error('No se pudo cambiar el estado del producto')
@@ -548,7 +562,7 @@ export default function ProductsPage() {
           </select>
           <div className="flex gap-2">
             <button onClick={fetchProducts} className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900">Filtrar</button>
-            <button onClick={() => { setSearch(''); setFilterCategory(''); setFilterKind(''); setFilterStatus(''); setTimeout(loadAll, 0) }}
+            <button onClick={handleClearFilters}
               className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Limpiar</button>
           </div>
         </div>

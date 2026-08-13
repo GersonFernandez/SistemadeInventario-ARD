@@ -54,15 +54,21 @@ export default function ServiceOrdersPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [showReportMenu])
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (overrides = {}) => {
     setLoading(true)
     try {
+      const effectiveSearch = overrides.search ?? search
+      const effectiveStatus = overrides.statusFilter ?? statusFilter
+      const effectiveType = overrides.typeFilter ?? typeFilter
+      const effectiveDateFrom = overrides.dateFrom ?? dateFrom
+      const effectiveDateTo = overrides.dateTo ?? dateTo
+
       const params = {}
-      if (search)       params.search       = search
-      if (statusFilter) params.status       = statusFilter
-      if (typeFilter)   params.service_type = typeFilter
-      if (dateFrom)     params.from         = dateFrom
-      if (dateTo)       params.to           = dateTo
+      if (effectiveSearch.trim()) params.search = effectiveSearch.trim()
+      if (effectiveStatus) params.status = effectiveStatus
+      if (effectiveType) params.service_type = effectiveType
+      if (effectiveDateFrom) params.from = effectiveDateFrom
+      if (effectiveDateTo) params.to = effectiveDateTo
       const { data } = await serviceOrderApi.getServiceOrders(params)
       setOrders(data.results || data)
     } catch {
@@ -88,6 +94,22 @@ export default function ServiceOrdersPage() {
     } finally {
       setShowReportMenu(false)
     }
+  }
+
+  const handleClearFilters = () => {
+    const cleared = {
+      search: '',
+      statusFilter: '',
+      typeFilter: '',
+      dateFrom: '',
+      dateTo: '',
+    }
+    setSearch(cleared.search)
+    setTypeFilter(cleared.typeFilter)
+    setStatusFilter(cleared.statusFilter)
+    setDateFrom(cleared.dateFrom)
+    setDateTo(cleared.dateTo)
+    fetchOrders(cleared)
   }
 
   const handleDownloadCompletionReceipt = async (order, format = 'pdf') => {
@@ -198,7 +220,7 @@ export default function ServiceOrdersPage() {
               Filtrar
             </button>
             <button
-              onClick={() => { setSearch(''); setTypeFilter(''); setStatusFilter(''); setDateFrom(''); setDateTo(''); setTimeout(fetchOrders, 0) }}
+              onClick={handleClearFilters}
               className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
               Limpiar

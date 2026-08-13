@@ -116,6 +116,9 @@ export const inventoryApi = {
     params: { type: format, ...params },
     responseType: 'blob',
   }),
+  getProductEntryAttachments: (receptionId, params = {}) => api.get('/inventory/product-entries/attachments/', {
+    params: { reception_id: receptionId, ...params },
+  }),
   uploadSignedReceipt: (receptionId, files = []) => {
     const formData = new FormData()
     formData.append('reception_id', receptionId)

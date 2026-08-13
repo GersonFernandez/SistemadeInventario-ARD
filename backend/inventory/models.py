@@ -281,7 +281,7 @@ class Item(DirtyFieldsMixin, models.Model):
 
     @property
     def is_critical(self):
-        return self.minimum_stock > 0 and self.quantity <= self.minimum_stock
+        return self.minimum_stock > 0 and self.stock_available <= self.minimum_stock
 
     @property
     def stock_available(self):

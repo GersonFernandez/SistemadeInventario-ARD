@@ -7,7 +7,7 @@ export const productApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   updateItem: (id, data) => api.patch(`/products/items/${id}/`, data),
-  deleteItem: (id) => api.delete(`/products/items/${id}/`),
+  deleteItem: (id) => api.patch(`/products/items/${id}/`, { is_active: false }),
 
   getCategories: () => api.get('/products/categories/'),
   createCategory: (data) => api.post('/products/categories/', data),

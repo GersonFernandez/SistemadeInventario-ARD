@@ -244,7 +244,6 @@ class ItemViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         search = self.request.query_params.get('search')
-        critical = self.request.query_params.get('critical')
         kind = self.request.query_params.get('kind')
         for_reception = self.request.query_params.get('for_reception')
 
@@ -265,15 +264,22 @@ class ItemViewSet(viewsets.ModelViewSet):
                 | Q(application__icontains=search)
             )
 
-        if critical is not None:
-            if critical.lower() in ('true', '1'):
-                queryset = [item for item in queryset if item.is_critical]
-            elif critical.lower() in ('false', '0'):
-                queryset = [item for item in queryset if not item.is_critical]
-
         if kind:
             queryset = queryset.filter(kind=kind)
 
+        return queryset
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        critical = self.request.query_params.get('critical')
+
+        if critical is None:
+            return queryset
+
+        if critical.lower() in ('true', '1'):
+            return [item for item in queryset if item.is_critical]
+        if critical.lower() in ('false', '0'):
+            return [item for item in queryset if not item.is_critical]
         return queryset
 
     def perform_create(self, serializer):
@@ -319,7 +325,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 item.sku or '—',
                 item.category.name,
                 item.location.get_breadcrumb() if item.location else '—',
-                item.quantity,
+                item.stock_available,
                 item.minimum_stock,
                 item.unit,
                 'Activo' if item.is_active else 'Inactivo',
@@ -890,6 +896,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
     permission_map_by_action = {
         'receipt': 'reports.export',
         'history_report': 'reports.export',
+        'attachments': 'reception.view',
         'upload_signed_receipt': 'reception.manage',
     }
     filter_backends = [DjangoFilterBackend]
@@ -1156,6 +1163,21 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
 
         data = EntradaProductoAttachmentSerializer(created, many=True, context={'request': request}).data
         return Response({'reception_id': reception_id, 'adjuntos': data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def attachments(self, request):
+        reception_id = request.query_params.get('reception_id')
+        attachment_type = request.query_params.get('attachment_type')
+
+        if not reception_id:
+            return Response({'detail': 'reception_id es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = EntradaProductoAttachment.objects.filter(reception_id=reception_id).order_by('-created_at')
+        if attachment_type:
+            queryset = queryset.filter(attachment_type=attachment_type)
+
+        data = EntradaProductoAttachmentSerializer(queryset, many=True, context={'request': request}).data
+        return Response({'reception_id': reception_id, 'adjuntos': data})
 
     def _prepare_seriales(self, tipo, cantidad, seriales, marca, modelo, index_offset=1):
         cleaned = [s.strip() for s in seriales if str(s).strip()]
