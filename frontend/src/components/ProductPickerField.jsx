@@ -206,8 +206,8 @@ export default function ProductPickerField({
             <p><span className="font-semibold text-gray-700">Marca:</span> {selectedItem.brand_name || selectedItem.marca || '—'}</p>
             <p><span className="font-semibold text-gray-700">Modelo:</span> {selectedItem.product_model_name || selectedItem.modelo || '—'}</p>
             <p><span className="font-semibold text-gray-700">Categoria:</span> {selectedItem.category_name || '—'}</p>
-            <p><span className="font-semibold text-gray-700">Unidad:</span> {selectedItem.unit || '—'}</p>
-            <p><span className="font-semibold text-gray-700">Stock actual:</span> {selectedItem.quantity ?? '—'}</p>
+            <p><span className="font-semibold text-gray-700">Unidad:</span> {selectedItem.unit_name || selectedItem.unit || '—'}</p>
+            <p><span className="font-semibold text-gray-700">Stock actual:</span> {selectedItem.stock_available ?? selectedItem.quantity ?? '—'}</p>
           </div>
           {selectedItem.application && (
             <p className="mt-2 text-[11px] text-gray-600">

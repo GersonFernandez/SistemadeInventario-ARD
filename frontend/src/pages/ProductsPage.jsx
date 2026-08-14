@@ -657,10 +657,10 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-5 py-4 text-center">
                       {p.track_by_serial ? (
-                        <span className="text-xs text-gray-400">Por serial</span>
+                        <span className="text-xs text-gray-600">{p.stock_available ?? 0} disp.</span>
                       ) : (
                         <span className={`text-sm font-bold ${p.is_critical ? 'text-red-600' : 'text-gray-900'}`}>
-                          {p.quantity ?? 0}
+                          {p.stock_available ?? p.quantity ?? 0}
                           {p.unit_name && <span className="ml-1 text-xs font-normal text-gray-400">{p.unit_name}</span>}
                         </span>
                       )}

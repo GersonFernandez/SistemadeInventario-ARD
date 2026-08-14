@@ -179,7 +179,7 @@ export default function ItemSelector({ onSelect, disabled = false, source = 'inv
                   <span className="text-xs text-gray-700">
                     {item.track_by_serial
                       ? `${item.stock_available} disp. / ${item.units_count} total`
-                      : `${item.quantity} ${item.unit}`}
+                      : `${item.stock_available ?? item.quantity} ${item.unit_name || item.unit || ''}`}
                   </span>
                   {source === 'dispatch' && Number(item.received_quantity || 0) > 0 && (
                     <span className="text-[10px] text-gray-500">Recibido: {item.received_quantity}</span>
@@ -203,7 +203,8 @@ export default function ItemSelector({ onSelect, disabled = false, source = 'inv
 
 function QuantitySelector({ item, onConfirm }) {
   const [qty, setQty] = useState(1)
-  const canSubmit = qty >= 1 && qty <= item.quantity
+  const availableStock = Number(item.stock_available ?? item.quantity ?? 0)
+  const canSubmit = qty >= 1 && qty <= availableStock
 
   return (
     <div className="flex items-end gap-2">
@@ -212,12 +213,12 @@ function QuantitySelector({ item, onConfirm }) {
         <input
           type="number"
           min={1}
-          max={item.quantity}
+          max={availableStock}
           value={qty}
           onChange={(e) => setQty(parseInt(e.target.value, 10) || 0)}
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
         />
-        <p className="mt-1 text-xs text-gray-500">Stock disponible: {item.quantity} {item.unit}</p>
+        <p className="mt-1 text-xs text-gray-500">Stock disponible: {availableStock} {item.unit_name || item.unit || ''}</p>
       </div>
       <button
         type="button"

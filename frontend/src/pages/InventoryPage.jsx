@@ -368,7 +368,7 @@ export default function InventoryPage() {
                         {isTool && (
                           <button onClick={() => toggleTool(item.id)} className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-brand-600 hover:text-brand-800">
                             {expanded ? <ChevronDownIcon className="h-3 w-3" /> : <ChevronRightIcon className="h-3 w-3" />}
-                            {units.length} unidad{units.length !== 1 ? 'es' : ''}
+                            {item.units_count ?? units.length} unidad{(item.units_count ?? units.length) !== 1 ? 'es' : ''}
                           </button>
                         )}
                       </td>
@@ -388,11 +388,11 @@ export default function InventoryPage() {
                       {/* stock */}
                       <td className="px-5 py-3 text-center">
                         {isTool ? (
-                          <span className="text-sm font-semibold text-gray-700">{units.length} ud.</span>
+                          <span className="text-sm font-semibold text-gray-700">{item.stock_available ?? 0} disp.</span>
                         ) : (
                           <div>
                             <span className={`text-sm font-bold ${item.is_critical ? 'text-red-600' : 'text-gray-900'}`}>
-                              {item.quantity ?? 0}
+                              {item.stock_available ?? item.quantity ?? 0}
                             </span>
                             {item.unit_name && <span className="ml-1 text-xs text-gray-400">{item.unit_name}</span>}
                             {item.minimum_stock > 0 && (

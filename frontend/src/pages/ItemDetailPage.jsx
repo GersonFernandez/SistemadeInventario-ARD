@@ -522,7 +522,7 @@ export default function ItemDetailPage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-2">Stock actual</h3>
               <p className="text-3xl font-bold text-brand-800">
-                {item.quantity} <span className="text-lg font-normal text-gray-600">{item.unit}</span>
+                {item.stock_available ?? item.quantity ?? 0} <span className="text-lg font-normal text-gray-600">{item.unit_name || item.unit}</span>
               </p>
             </div>
           )}
