@@ -229,17 +229,9 @@ export default function ReceptionFormPage() {
         // Si no se pueden leer adjuntos, mantenemos el guardado exitoso.
       }
 
-      setFechaRecepcion(new Date().toISOString().slice(0, 16))
-      setObservaciones('')
-      setEntregadoPorNombre('')
-      setEntregadoPorApellido('')
-      setEntregadoPorCedula('')
-      setCedulaError('')
-      setEntregadoPorRangoCargo('')
-      setLineas([{ ...emptyLine }])
-      setPhotos([])
-      setDocuments([])
-      setSignedReceipt([])
+      // Redirige al detalle para evitar percepción de pérdida de datos
+      // y continuar el flujo de adjuntos/comprobante firmado.
+      navigate(`/reception/${data.reception_id}`)
     } catch (error) {
       const apiCedulaError = error.response?.data?.entregado_por_cedula?.[0]
       if (apiCedulaError) setCedulaError(apiCedulaError)
