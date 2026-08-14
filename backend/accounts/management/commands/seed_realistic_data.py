@@ -367,15 +367,16 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
     def _generate_item_code(self, category):
         from inventory.models import Item
-        last = Item.objects.filter(category=category).exclude(code__isnull=True).exclude(code='').order_by('code').last()
-        if last and last.code:
+        prefix = f"{category.abbreviation.upper()}-"
+        existing_codes = Item.objects.filter(code__startswith=prefix).exclude(code__isnull=True).exclude(code='').values_list('code', flat=True)
+        max_suffix = 0
+        for code in existing_codes:
             try:
-                new_num = int(last.code.split('-')[-1]) + 1
-            except ValueError:
-                new_num = 1
-        else:
-            new_num = 1
-        return f"{category.abbreviation.upper()}-{new_num:03d}"
+                suffix = int(str(code).split('-')[-1])
+            except (TypeError, ValueError):
+                continue
+            max_suffix = max(max_suffix, suffix)
+        return f"{category.abbreviation.upper()}-{max_suffix + 1:03d}"
 
     def _items(self, cats, brands, models_map, states, units_map, locations):
         from inventory.models import Item, StockMovement

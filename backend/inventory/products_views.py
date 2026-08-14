@@ -1,5 +1,7 @@
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import viewsets, permissions
+from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
 
@@ -131,22 +133,36 @@ class ProductItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         category = serializer.validated_data.get('category')
-        code = self._generate_code(category)
-        serializer.save(code=code, is_base_product=True)
+        for _ in range(3):
+            code = self._generate_code(category)
+            try:
+                with transaction.atomic():
+                    serializer.save(code=code, is_base_product=True)
+                return
+            except IntegrityError as exc:
+                if 'inventory_item_code_key' not in str(exc):
+                    raise
+
+        raise ValidationError({
+            'detail': 'No se pudo generar un código único para el producto. Intente nuevamente.'
+        })
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save(update_fields=['is_active', 'updated_at'])
 
     def _generate_code(self, category):
-        last_item = Item.objects.filter(category=category).order_by('code').last()
-        if last_item and last_item.code:
-            try:
-                last_num = int(last_item.code.split('-')[-1])
-                new_num = last_num + 1
-            except ValueError:
-                new_num = 1
-        else:
-            new_num = 1
         abbreviation = category.abbreviation.upper()
+        prefix = f"{abbreviation}-"
+        existing_codes = Item.objects.filter(code__startswith=prefix).values_list('code', flat=True)
+        max_suffix = 0
+
+        for code in existing_codes:
+            try:
+                suffix = int(str(code).split('-')[-1])
+            except (TypeError, ValueError):
+                continue
+            max_suffix = max(max_suffix, suffix)
+
+        new_num = max_suffix + 1
         return f"{abbreviation}-{new_num:03d}"

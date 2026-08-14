@@ -39,6 +39,7 @@ export default function InventoryPage() {
   const [loading, setLoading]           = useState(true)
   const [page, setPage]                 = useState(1)
   const [totalCount, setTotalCount]     = useState(0)
+  const [criticalTotalCount, setCriticalTotalCount] = useState(0)
   const [showReportMenu, setShowReportMenu] = useState(false)
   const [expandedTools, setExpandedTools]  = useState({})
 
@@ -72,22 +73,35 @@ export default function InventoryPage() {
     load()
   }, [])
 
+  const buildBaseFilters = useCallback(() => {
+    const params = {}
+    if (search.trim()) params.search = search.trim()
+    if (filterCategory) params.category = filterCategory
+    if (filterLocation) params.location = filterLocation
+    if (filterKind) params.kind = filterKind
+    if (filterStatus === 'active') params.is_active = 'true'
+    if (filterStatus === 'inactive') params.is_active = 'false'
+    return params
+  }, [search, filterCategory, filterLocation, filterKind, filterStatus])
+
   const fetchItems = useCallback(async (targetPage = 1) => {
     setLoading(true)
     try {
-      const params = { page: targetPage, page_size: PAGE_SIZE }
-      if (search.trim())      params.search   = search.trim()
-      if (filterCategory)     params.category = filterCategory
-      if (filterLocation)     params.location = filterLocation
-      if (filterKind)         params.kind     = filterKind
-      if (filterCritical)     params.critical = filterCritical
-      if (filterStatus === 'active')   params.is_active = 'true'
-      if (filterStatus === 'inactive') params.is_active = 'false'
+      const params = { ...buildBaseFilters(), page: targetPage, page_size: PAGE_SIZE }
+      if (filterCritical) params.critical = filterCritical
 
       const { data } = await inventoryApi.getItems(params)
       const list = data.results || data
       setItems(list)
       setTotalCount(data.count ?? list.length)
+
+      const { data: criticalData } = await inventoryApi.getItems({
+        ...buildBaseFilters(),
+        page: 1,
+        page_size: 1,
+        critical: 'true',
+      })
+      setCriticalTotalCount(criticalData.count ?? (criticalData.results || criticalData).length ?? 0)
 
       // load units for tool items (track_by_serial)
       const toolIds = list.filter((i) => i.track_by_serial).map((i) => i.id)
@@ -106,7 +120,7 @@ export default function InventoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, filterCategory, filterLocation, filterKind, filterCritical, filterStatus])
+  }, [buildBaseFilters, filterCritical])
 
   // re-fetch when filters change
   useEffect(() => {
@@ -182,8 +196,8 @@ export default function InventoryPage() {
 
   const toggleTool = (id) => setExpandedTools((prev) => ({ ...prev, [id]: !prev[id] }))
 
-  // ── summary counts (current page) ──
-  const criticalCount = items.filter((i) => i.is_critical).length
+  // ── summary counts ──
+  const criticalCount = criticalTotalCount
   const toolCount     = items.filter((i) => i.track_by_serial).length
   const consumCount   = items.filter((i) => !i.track_by_serial).length
 

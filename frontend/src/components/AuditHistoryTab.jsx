@@ -38,7 +38,11 @@ export default function AuditHistoryTab({ modelName, objectId }) {
       })
       setLogs(data.results || data)
     } catch (error) {
-      console.error('Failed to fetch audit logs', error)
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        setLogs([])
+      } else {
+        setLogs([])
+      }
     } finally {
       setLoading(false)
     }

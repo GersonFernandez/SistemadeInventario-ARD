@@ -52,7 +52,7 @@ export const inventoryApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   deleteItem: (id) => api.delete(`/inventory/items/${id}/`),
-  getCriticalItems: () => api.get('/inventory/items/critical/'),
+  getCriticalItems: (params = {}) => api.get('/inventory/items/critical/', { params }),
   addItemUnit: (id, data) => api.post(`/inventory/items/${id}/add_unit/`, data),
 
   getItemUnits: (params = {}) => api.get('/inventory/item-units/', { params }),

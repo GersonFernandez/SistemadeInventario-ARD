@@ -1,4 +1,4 @@
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.core.validators import MinValueValidator
 from django.conf import settings
 from dirtyfields import DirtyFieldsMixin
@@ -122,9 +122,22 @@ class Despacho(DirtyFieldsMixin, models.Model):
         return f"{self.ot_number} → {self.solicitante.name}"
 
     def save(self, *args, **kwargs):
-        if not self.ot_number:
+        if self.ot_number:
+            super().save(*args, **kwargs)
+            return
+
+        for _ in range(3):
             self.ot_number = self.generate_despacho_number()
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError as exc:
+                if 'workorders_despacho_ot_number' not in str(exc):
+                    raise
+                self.ot_number = ''
+
+        raise IntegrityError('No se pudo generar un número único de despacho.')
 
     @classmethod
     @transaction.atomic
@@ -345,9 +358,6 @@ class ServiceOrder(DirtyFieldsMixin, models.Model):
         return f"{self.service_number} - {self.get_service_type_display()}"
 
     def save(self, *args, **kwargs):
-        if not self.service_number:
-            self.service_number = self.generate_service_number()
-
         if self.equipment_id:
             self.equipment_name_snapshot = self.equipment.name or ''
             self.equipment_brand_snapshot = (
@@ -359,7 +369,22 @@ class ServiceOrder(DirtyFieldsMixin, models.Model):
             self.equipment_description_snapshot = self.equipment.description or ''
             self.equipment_serial_number = (self.equipment_serial_number or '').strip()
 
-        super().save(*args, **kwargs)
+        if self.service_number:
+            super().save(*args, **kwargs)
+            return
+
+        for _ in range(3):
+            self.service_number = self.generate_service_number()
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError as exc:
+                if 'workorders_serviceorder_service_number' not in str(exc):
+                    raise
+                self.service_number = ''
+
+        raise IntegrityError('No se pudo generar un número único de orden de servicio.')
 
     @classmethod
     @transaction.atomic

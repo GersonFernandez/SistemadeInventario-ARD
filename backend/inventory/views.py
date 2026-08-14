@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q, Max
 from django.http import FileResponse
 from django.utils import timezone
@@ -288,20 +288,35 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         category = serializer.validated_data.get('category')
-        code = self._generate_code(category)
-        serializer.save(code=code)
+        for _ in range(3):
+            code = self._generate_code(category)
+            try:
+                with transaction.atomic():
+                    serializer.save(code=code)
+                return
+            except IntegrityError as exc:
+                if 'inventory_item_code_key' not in str(exc):
+                    raise
+
+        from rest_framework.exceptions import ValidationError
+        raise ValidationError({
+            'detail': 'No se pudo generar un código único para el artículo. Intente nuevamente.'
+        })
 
     def _generate_code(self, category):
-        last_item = Item.objects.filter(category=category).order_by('code').last()
-        if last_item and last_item.code:
-            try:
-                last_num = int(last_item.code.split('-')[-1])
-                new_num = last_num + 1
-            except ValueError:
-                new_num = 1
-        else:
-            new_num = 1
         abbreviation = category.abbreviation.upper()
+        prefix = f"{abbreviation}-"
+        existing_codes = Item.objects.filter(code__startswith=prefix).values_list('code', flat=True)
+        max_suffix = 0
+
+        for code in existing_codes:
+            try:
+                suffix = int(str(code).split('-')[-1])
+            except (TypeError, ValueError):
+                continue
+            max_suffix = max(max_suffix, suffix)
+
+        new_num = max_suffix + 1
         return f"{abbreviation}-{new_num:03d}"
 
     @action(detail=False, methods=['get'])
@@ -315,11 +330,9 @@ class ItemViewSet(viewsets.ModelViewSet):
         only_critical = request.query_params.get('critical', 'false').lower() == 'true'
         only_herramientas = request.query_params.get('kind', '').lower() == 'herramienta'
 
-        items = list(self.get_queryset())
-        if only_critical:
-            items = [i for i in items if i.is_critical]
-        if only_herramientas:
-            items = [i for i in items if i.kind == 'herramienta']
+        # Reutiliza exactamente los mismos filtros del listado
+        # (search, category, location, kind, is_active, critical, etc.).
+        items = list(self.filter_queryset(self.get_queryset()))
 
         headers = ['Código', 'Nombre', 'SKU', 'Categoría', 'Ubicación', 'Stock', 'Mínimo', 'Unidad', 'Estado']
         rows = [
@@ -357,7 +370,19 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def critical(self, request):
-        items = [item for item in self.get_queryset() if item.is_critical]
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Para coincidir con Inventario por defecto, solo activos cuando
+        # no se especifica explícitamente is_active.
+        if 'is_active' not in request.query_params:
+            queryset = queryset.filter(is_active=True)
+
+        items = [item for item in queryset if item.is_critical]
+        page = self.paginate_queryset(items)
+        if page is not None:
+            serializer = ItemListSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
         serializer = ItemListSerializer(items, many=True)
         return Response(serializer.data)
 

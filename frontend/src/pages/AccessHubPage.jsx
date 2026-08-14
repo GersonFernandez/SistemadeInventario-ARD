@@ -45,17 +45,17 @@ export default function AccessHubPage() {
       try {
         const results = await Promise.allSettled([
           inventoryApi.getItems({ page_size: 1, is_active: 'true' }),
-          inventoryApi.getCriticalItems(),
+          inventoryApi.getCriticalItems({ page_size: 1, is_active: 'true' }),
           serviceOrderApi.getServiceOrders({ page_size: 1 }),
-          serviceOrderApi.getServiceOrders({ status: 'en_proceso', page_size: 100 }),
+          serviceOrderApi.getServiceOrders({ status: 'en_proceso', page_size: 1 }),
           canViewDespachos ? despachoApi.getDespachos({ page_size: 1 }) : Promise.resolve(null),
         ])
 
         setStats({
           totalItems:     results[0].status === 'fulfilled' ? (results[0].value.data.count ?? results[0].value.data.length ?? 0) : '—',
-          criticalItems:  results[1].status === 'fulfilled' ? (results[1].value.data.results ?? results[1].value.data).length : '—',
+          criticalItems:  results[1].status === 'fulfilled' ? (results[1].value.data.count ?? results[1].value.data.length ?? 0) : '—',
           totalOrders:    results[2].status === 'fulfilled' ? (results[2].value.data.count ?? results[2].value.data.length ?? 0) : '—',
-          activeOrders:   results[3].status === 'fulfilled' ? (results[3].value.data.results ?? results[3].value.data).length : '—',
+          activeOrders:   results[3].status === 'fulfilled' ? (results[3].value.data.count ?? results[3].value.data.length ?? 0) : '—',
           totalDespachos: results[4].status === 'fulfilled' && results[4].value ? (results[4].value.data.count ?? results[4].value.data.length ?? 0) : '—',
         })
       } catch {
