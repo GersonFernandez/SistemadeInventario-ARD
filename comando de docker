@@ -42,3 +42,5 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml down
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 docker logs --tail 200 inventario_backend_prod
+
+docker compose logs backend

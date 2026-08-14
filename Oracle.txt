@@ -180,3 +180,15 @@ EOF
 
 
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --pull always --wait
+
+git pull
+docker compose run --rm backend python manage.py migrate
+docker compose up -d --build
+
+
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait && \
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T backend python manage.py migrate && \
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T backend python manage.py seed_realistic_data --force
+
+docker exec inventario_backend python manage.py seed_realistic_data --force
+docker exec inventario_backend python manage.py seed_dev_data --force --count 500

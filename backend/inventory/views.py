@@ -54,6 +54,7 @@ from .serializers import (
 )
 from .permissions import IsAlmacenistaOrAdmin, IsAdminAlmacenistaOrTecnico
 from accounts.permissions import require_permission
+from audit.models import AuditLog
 
 
 class ItemFilter(FilterSet):
@@ -897,6 +898,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         'receipt': 'reports.export',
         'history_report': 'reports.export',
         'attachments': 'reception.view',
+        'upload_attachments': 'reception.manage',
         'upload_signed_receipt': 'reception.manage',
     }
     filter_backends = [DjangoFilterBackend]
@@ -1023,6 +1025,18 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                     uploaded_by=request.user,
                 )
 
+        self._log_reception_event(
+            reception_id=reception_id,
+            action=AuditLog.Action.CREATE,
+            event='reception_created',
+            details={
+                'line_count': len(created),
+                'photos_uploaded': len(request.FILES.getlist('photos')),
+                'documents_uploaded': len(request.FILES.getlist('documents')) + len(request.FILES.getlist('attachments')),
+                'signed_uploaded': len(request.FILES.getlist('signed_receipt')),
+            },
+        )
+
         result = EntradaProductoSerializer(created, many=True)
         return Response({'reception_id': reception_id, 'lineas': result.data}, status=status.HTTP_201_CREATED)
 
@@ -1058,7 +1072,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             ])
 
         buffer = build_report(
-            f'Comprobante de Recepción {reception_id}',
+            'COMPROBANTE',
             headers,
             rows,
             fmt,
@@ -1067,15 +1081,21 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
                 'delivered_by': f"{first.entregado_por_nombre} {first.entregado_por_apellido} ({first.entregado_por_rango_cargo})",
                 'received_by': first.registrado_por.name,
             },
-            metadata_lines=[
-                f"Entregado por: {first.entregado_por_nombre} {first.entregado_por_apellido}",
-                f"Cédula: {first.entregado_por_cedula}",
-                f"Rango/Cargo: {first.entregado_por_rango_cargo}",
-                f"Recibido por: {first.registrado_por.name}",
-            ],
+            receipt_mode=True,
         )
         content_type = 'application/pdf' if fmt == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         extension = 'pdf' if fmt == 'pdf' else 'xlsx'
+
+        self._log_reception_event(
+            reception_id=reception_id,
+            action=AuditLog.Action.UPDATE,
+            event='reception_receipt_downloaded',
+            details={
+                'format': fmt,
+                'line_count': entries.count(),
+            },
+        )
+
         return FileResponse(
             buffer,
             as_attachment=True,
@@ -1161,6 +1181,68 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             )
             created.append(attachment)
 
+        self._log_reception_event(
+            reception_id=reception_id,
+            action=AuditLog.Action.UPDATE,
+            event='signed_receipt_uploaded',
+            details={
+                'files_count': len(created),
+                'filenames': [f.name for f in uploaded_files],
+            },
+        )
+
+        data = EntradaProductoAttachmentSerializer(created, many=True, context={'request': request}).data
+        return Response({'reception_id': reception_id, 'adjuntos': data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def upload_attachments(self, request):
+        reception_id = request.data.get('reception_id') or request.query_params.get('reception_id')
+        if not reception_id:
+            return Response({'detail': 'reception_id es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        entries = self.get_queryset().filter(reception_id=reception_id)
+        if not entries.exists():
+            return Response({'detail': 'No se encontró la recepción indicada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        created = []
+        for uploaded in request.FILES.getlist('photos'):
+            created.append(EntradaProductoAttachment.objects.create(
+                reception_id=reception_id,
+                file=uploaded,
+                attachment_type=EntradaProductoAttachment.AttachmentType.FOTO,
+                uploaded_by=request.user,
+            ))
+
+        for uploaded in request.FILES.getlist('documents'):
+            created.append(EntradaProductoAttachment.objects.create(
+                reception_id=reception_id,
+                file=uploaded,
+                attachment_type=EntradaProductoAttachment.AttachmentType.DOCUMENTO,
+                uploaded_by=request.user,
+            ))
+
+        for uploaded in request.FILES.getlist('signed_receipt'):
+            created.append(EntradaProductoAttachment.objects.create(
+                reception_id=reception_id,
+                file=uploaded,
+                attachment_type=EntradaProductoAttachment.AttachmentType.COMPROBANTE_FIRMADO,
+                uploaded_by=request.user,
+            ))
+
+        if not created:
+            return Response({'detail': 'Debe adjuntar al menos un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        self._log_reception_event(
+            reception_id=reception_id,
+            action=AuditLog.Action.UPDATE,
+            event='reception_attachments_uploaded',
+            details={
+                'photos_count': len(request.FILES.getlist('photos')),
+                'documents_count': len(request.FILES.getlist('documents')),
+                'signed_count': len(request.FILES.getlist('signed_receipt')),
+            },
+        )
+
         data = EntradaProductoAttachmentSerializer(created, many=True, context={'request': request}).data
         return Response({'reception_id': reception_id, 'adjuntos': data}, status=status.HTTP_201_CREATED)
 
@@ -1176,8 +1258,38 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         if attachment_type:
             queryset = queryset.filter(attachment_type=attachment_type)
 
+        self._log_reception_event(
+            reception_id=reception_id,
+            action=AuditLog.Action.UPDATE,
+            event='reception_attachments_viewed',
+            details={
+                'attachment_type': attachment_type or 'all',
+                'count': queryset.count(),
+            },
+        )
+
         data = EntradaProductoAttachmentSerializer(queryset, many=True, context={'request': request}).data
         return Response({'reception_id': reception_id, 'adjuntos': data})
+
+    def _log_reception_event(self, reception_id, action, event, details=None):
+        request = getattr(self, 'request', None)
+        user = request.user if request and request.user.is_authenticated else None
+        ip = None
+        if request:
+            forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+            ip = forwarded.split(',')[0].strip() if forwarded else request.META.get('REMOTE_ADDR')
+
+        AuditLog.objects.create(
+            action=action,
+            model_name='inventory.reception',
+            object_id=str(reception_id),
+            changes={
+                'event': event,
+                'details': details or {},
+            },
+            user=user,
+            ip_address=ip,
+        )
 
     def _prepare_seriales(self, tipo, cantidad, seriales, marca, modelo, index_offset=1):
         cleaned = [s.strip() for s in seriales if str(s).strip()]

@@ -8,6 +8,7 @@ import LocationsPage from '../pages/LocationsPage'
 import CatalogsPage from '../pages/CatalogsPage'
 import ProductCatalogsPage from '../pages/ProductCatalogsPage'
 import ReceptionPage from '../pages/ReceptionPage'
+import ReceptionDetailPage from '../pages/ReceptionDetailPage'
 import ItemDetailPage from '../pages/ItemDetailPage'
 import ItemFormPage from '../pages/ItemFormPage'
 import PrintLabelPage from '../pages/PrintLabelPage'
@@ -39,6 +40,7 @@ const appRoutes = [
   { path: '/product-catalogs', element: <ProductCatalogsPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'catalogs.view' },
   { path: '/reception', element: <ReceptionPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'reception.view' },
   { path: '/reception/new', element: <ReceptionFormPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'reception.manage' },
+  { path: '/reception/:id', element: <ReceptionDetailPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'reception.view' },
   { path: '/despachos', element: <DespachosPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'despachos.view' },
   { path: '/despachos/new', element: <DespachoFormPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'despachos.manage' },
   { path: '/despachos/:id', element: <DespachoDetailPage />, allowedRoles: ['admin', 'almacenista'], permissionKey: 'despachos.view' },

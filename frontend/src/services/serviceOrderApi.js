@@ -13,6 +13,13 @@ export const serviceOrderApi = {
     api.post(`/work-orders/service-orders/${id}/add_note/`, { note }),
   completeServiceOrder: (id, data) =>
     api.post(`/work-orders/service-orders/${id}/complete_service/`, data),
+  uploadSignedReceipt: (id, file) => {
+    const formData = new FormData()
+    formData.append('signed_receipt', file)
+    return api.post(`/work-orders/service-orders/${id}/upload_signed_receipt/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   downloadCompletionReceipt: (id, format = 'pdf') =>
     api.get(`/work-orders/service-orders/${id}/completion_receipt/?type=${format}`, {
       responseType: 'blob',

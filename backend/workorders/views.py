@@ -9,12 +9,14 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from utils.reports import build_report
 from .models import Despacho, LineaDespacho, Solicitante, ServiceOrder, ServiceOrderLog
+from .models import DespachoAttachment
 from inventory.models import Item, ItemUnit, ItemLoan, StockMovement, EntradaProducto
 from inventory.serializers import ItemListSerializer
 from .serializers import (
     DespachoListSerializer,
     DespachoDetailSerializer,
     LineaDespachoSerializer,
+    DespachoAttachmentSerializer,
     SolicitanteSerializer,
     SolicitanteSimpleSerializer,
     ServiceOrderSerializer,
@@ -88,6 +90,8 @@ class DespachoViewSet(viewsets.ModelViewSet):
         'report': 'reports.export',
         'reception_dispatch_report': 'reports.export',
         'receipt': 'reports.export',
+        'attachments': 'despachos.view',
+        'upload_attachments': 'despachos.manage',
         'dispatchable_items': 'despachos.manage',
         'cancel': 'despachos.manage',
     }
@@ -364,11 +368,12 @@ class DespachoViewSet(viewsets.ModelViewSet):
             ])
 
         buffer = build_report(
-            f'Comprobante de Despacho {despacho.ot_number}',
+            'COMPROBANTE',
             headers,
             rows,
             format,
             include_signatures=True,
+            receipt_mode=True,
         )
         content_type = 'application/pdf' if format == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         extension = 'pdf' if format == 'pdf' else 'xlsx'
@@ -378,6 +383,43 @@ class DespachoViewSet(viewsets.ModelViewSet):
             filename=f"comprobante_{despacho.ot_number}.{extension}",
             content_type=content_type,
         )
+
+    @action(detail=True, methods=['get'])
+    def attachments(self, request, pk=None):
+        despacho = self.get_object()
+        attachment_type = request.query_params.get('attachment_type')
+        queryset = despacho.attachments.all().order_by('-created_at')
+        if attachment_type:
+            queryset = queryset.filter(attachment_type=attachment_type)
+        data = DespachoAttachmentSerializer(queryset, many=True, context={'request': request}).data
+        return Response({'despacho_id': despacho.id, 'adjuntos': data})
+
+    @action(detail=True, methods=['post'])
+    def upload_attachments(self, request, pk=None):
+        despacho = self.get_object()
+        created = []
+
+        for uploaded in request.FILES.getlist('evidences'):
+            created.append(DespachoAttachment.objects.create(
+                despacho=despacho,
+                file=uploaded,
+                attachment_type=DespachoAttachment.AttachmentType.EVIDENCIA,
+                uploaded_by=request.user,
+            ))
+
+        for uploaded in request.FILES.getlist('receipts'):
+            created.append(DespachoAttachment.objects.create(
+                despacho=despacho,
+                file=uploaded,
+                attachment_type=DespachoAttachment.AttachmentType.COMPROBANTE,
+                uploaded_by=request.user,
+            ))
+
+        if not created:
+            return Response({'detail': 'Debe adjuntar al menos un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = DespachoAttachmentSerializer(created, many=True, context={'request': request}).data
+        return Response({'despacho_id': despacho.id, 'adjuntos': data}, status=status.HTTP_201_CREATED)
 
 
 class ServiceOrderViewSet(viewsets.ModelViewSet):
@@ -393,6 +435,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     permission_map_by_action = {
         'report': 'reports.export',
         'completion_receipt': 'reports.export',
+        'upload_signed_receipt': 'service_orders.manage',
         'assign': 'service_orders.manage',
         'transition': 'service_orders.manage',
         'add_note': 'service_orders.manage',
@@ -494,6 +537,12 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         if new_status not in allowed_transitions.get(old_status, set()):
             return Response({'detail': 'Transición de estado no permitida.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if new_status == ServiceOrder.Status.ENTREGADO and not service_order.signed_receipt:
+            return Response(
+                {'detail': 'Debe registrar el comprobante firmado antes de marcar la orden como Entregada.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         with transaction.atomic():
             service_order.status = new_status
             if new_status == ServiceOrder.Status.COMPLETADO and not service_order.completed_at:
@@ -512,6 +561,27 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             )
 
         return Response(self.get_serializer(service_order).data)
+
+    @action(detail=True, methods=['post'])
+    def upload_signed_receipt(self, request, pk=None):
+        service_order = self.get_object()
+        uploaded = request.FILES.get('signed_receipt') or request.FILES.get('file')
+        if not uploaded:
+            return Response({'detail': 'Debe adjuntar un archivo firmado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        service_order.signed_receipt = uploaded
+        service_order.save(update_fields=['signed_receipt', 'updated_at'])
+
+        ServiceOrderLog.objects.create(
+            service_order=service_order,
+            actor=request.user,
+            event='signed_receipt_uploaded',
+            from_status=service_order.status,
+            to_status=service_order.status,
+            note='Se registró el comprobante firmado.',
+        )
+
+        return Response(self.get_serializer(service_order).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def add_note(self, request, pk=None):

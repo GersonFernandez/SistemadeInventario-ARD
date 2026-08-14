@@ -1,182 +1,43 @@
-Genera un sistema web completo con backend en Django + Django REST Framework y frontend en React, siguiendo arquitectura modular y escalable. Incluye:
+cat > .env.prod << 'EOF'
+DEBUG=true
 
-### 1. Inicialización de Ambientes
-- Backend: Django + Django REST Framework + PostgreSQL (fallback SQLite).
-- Frontend: React con componentes modulares y consumo de API REST.
-- Dockerización: contenedores separados para backend, frontend y base de datos.
-- Scripts de inicialización para levantar ambos ambientes con `docker-compose up`.
+# Genera esto en Oracle:
+# python3 -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+SECRET_KEY=CAMBIA_ESTA_SECRET_KEY
 
-### 2. Autenticación y Seguridad
-- Login con correo y contraseña.
-- Configuración de tiempo de sesión (administrador define minutos).
-- Cambio de contraseña por usuario con confirmación vía correo.
-- Restablecimiento de contraseña por administrador con envío de contraseña temporal.
-- Roles: Administrador (gestiona todo) y Técnico (solo instalaciones, reparaciones, salidas asignadas).
-- Notificación por correo al registrar técnicos.
-- Seguridad: hashing de contraseñas, CSRF, XSS prevention.
+POSTGRES_DB=inventario
+POSTGRES_USER=inventario_user
+POSTGRES_PASSWORD=inventario_pass
+DATABASE_URL=postgres://inventario_user:inventario_pass@db:5432/inventario
+DATABASE_SSL_REQUIRE=False
 
-### 3. Inventario
-- Entrada de productos (múltiples en lote).
-- Salida de productos (individual, con serial obligatorio o autogenerado).
-- Tipos de salida: Permanente o Préstamo.
-- En préstamos: fecha fin obligatoria y alerta automática si vence.
-- Adjuntar documentos/fotos en entradas y salidas.
-- Generar comprobantes PDF imprimibles con espacio para firmas (entrega/recepción).
+ALLOWED_HOSTS=localhost,127.0.0.1,163.192.120.229,mono59.net,www.mono59.net
+CORS_ALLOWED_ORIGINS=http://mono59.net,https://mono59.net,http://www.mono59.net,https://www.mono59.net,http://163.192.120.229
 
-### 4. Reparaciones
-- Registro de reparaciones por producto.
-- Detalle de qué se reparó (ej. cambio de batería, soldadura).
-- Tracking histórico: cuántas veces se reparó cada producto.
-- Reportes de mantenimiento por producto.
+# Produccion real
+SEED_DEV_DATA_100=false
+SEED_DEV_COUNT=100
+SEED_DEV_RESET=false
 
-### 5. Instalaciones
-- Salida de producto → técnico asignado → registro de instalación en ubicación.
-- Estado del producto cambia a “instalado”.
+# Admin inicial
+DEFAULT_ADMIN_NAME=Administrador
+DEFAULT_ADMIN_EMAIL=admin@armada.mil.do
+DEFAULT_ADMIN_PASSWORD=Admin123456!
 
-### 6. Solicitantes
-- En salida: si solicitante no existe, registrarlo inline (nombre, apellido, cédula, ubicación, nota).
-- Pantalla independiente para administrar solicitantes (agregar, modificar, deshabilitar, nunca borrar).
+GUNICORN_WORKERS=4
+FRONTEND_PORT=8080
+VITE_API_URL=/api/v1
 
-### 7. Catálogos de Configuración
-- Pantallas CRUD (agregar, modificar, deshabilitar):
-  - Ubicaciones (almacén, taller, cliente).
-  - Marcas.
-  - Modelos (asociados a marcas).
-  - Categorías de productos.
-  - Estados de productos (almacenado, instalado, en reparación, prestado, descargado).
-
-### 8. Préstamos
-- Pantalla para buscar artículos prestados (filtros: producto, solicitante, técnico, ubicación, estado).
-- Reporte PDF imprimible con listado de préstamos vigentes, vencidos y devueltos.
-- Espacio para firmas en el reporte.
-
-### 9. Frontend React
-- Formularios dinámicos para entradas, salidas, instalaciones, reparaciones.
-- Tablas con filtros y estados visuales (ej. préstamos vencidos en rojo).
-- Botones para subir documentos/fotos y generar comprobantes PDF.
-- Panel de administración para catálogos y usuarios.
-- Dashboard con alertas de préstamos vencidos y cambios de estado.
-
-### 10. Auditoría
-- Registro histórico de todas las acciones (entradas, salidas, instalaciones, reparaciones, cambios de contraseña).
-- No se borra nada de la base de datos, solo se deshabilita para mantener histórico.
-
-### 11. Entregables
-- Código fuente completo (backend Django + frontend React).
-- Migraciones de base de datos (PostgreSQL/SQLite).
-- Scripts de inicialización y docker-compose.
-- Documentación técnica (Swagger/OpenAPI).
-- Manual de usuario básico.
-
-Genera todo el código en Visual Studio Code, con estructura modular y buenas prácticas.
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=monografico59@gmail.com
+EMAIL_HOST_PASSWORD=qikgmrsjiclwvbdq
+EMAIL_USE_TLS=True
+EMAIL_USE_SSL=False
+DEFAULT_FROM_EMAIL=monografico59@gmail.com
+EOF
 
 
-2 promt 
-Genera un sistema completo en Django + Django REST Framework (backend) y React (frontend) que incluya:
 
-### 1. Inicialización de Ambientes
-- Backend: Django + Django REST Framework + PostgreSQL (fallback SQLite).
-- Frontend: React con componentes modulares y consumo de API REST.
-- Dockerización: contenedores separados para backend, frontend y base de datos.
-- Scripts de inicialización para levantar ambos ambientes con `docker-compose up`.
-
-### 2. CRUD Completo
-Implementar CRUD para las siguientes entidades:
-- **Usuarios** (Administrador, Técnico, Solicitante).
-- **Inventario** (Entradas, Salidas, Instalaciones).
-- **Productos** (Marca, Modelo, Categoría, Estado).
-- **Reparaciones** (Producto, técnico, detalles de reparación).
-- **Solicitantes** (Nombre, Apellido, Cédula, Ubicación, Nota).
-- **Ubicaciones** (Agregar, modificar, deshabilitar).
-- **Préstamos** (Producto, solicitante, técnico, fechas, estado).
-
-### 3. Funcionalidades CRUD
-- **Create**: formularios para agregar registros (ej. entrada de productos, registro de solicitantes).
-- **Read**: tablas con filtros y paginación para listar registros.
-- **Update**: formularios para modificar datos existentes.
-- **Delete**: deshabilitar registros (no borrar, mantener histórico).
-- **Adjuntos**: permitir subir documentos/fotos en entradas y salidas.
-- **Reportes PDF**: generar comprobantes imprimibles con espacio para firmas.
-
-### 4. Autenticación y Seguridad
-- Login con correo y contraseña.
-- Configuración de tiempo de sesión (administrador define minutos).
-- Cambio de contraseña por usuario con confirmación vía correo.
-- Restablecimiento de contraseña por administrador con envío de contraseña temporal.
-- Roles: Administrador (gestiona todo) y Técnico (solo instalaciones, reparaciones, salidas asignadas).
-- Notificación por correo al registrar técnicos.
-
-### 5. Frontend React
-- Formularios dinámicos para CRUD de todas las entidades.
-- Tablas con filtros y estados visuales (ej. préstamos vencidos en rojo).
-- Botones para subir documentos/fotos y generar comprobantes PDF.
-- Panel de administración para catálogos y usuarios.
-- Dashboard con alertas de préstamos vencidos y cambios de estado.
-
-### 6. Auditoría
-- Registro histórico de todas las acciones (entradas, salidas, instalaciones, reparaciones, cambios de contraseña).
-- No se borra nada de la base de datos, solo se deshabilita para mantener histórico.
-
-Usa buenas prácticas:
-- Arquitectura modular y escalable.
-- ORM de Django con relaciones claras.
-- API REST con endpoints CRUD.
-- React con componentes reutilizables y validaciones.
-- Seguridad: hashing de contraseñas, CSRF, XSS prevention.
-- Generación de PDFs con librerías como ReportLab o WeasyPrint.
-- Envío de correos con Django Email Backend.
-
-Genera el código completo en Visual Studio Code, con estructura modular y buenas prácticas.
-
-tercert promt 
-
-Genera un sistema completo en Django + Django REST Framework (backend) y React (frontend) que incluya:
-
-### 1. Inicialización
-- Backend: Django + Django REST Framework + PostgreSQL (fallback SQLite).
-- Frontend: React con componentes modulares y consumo de API REST.
-- Dockerización opcional para levantar ambos ambientes con `docker-compose up`.
-- Scripts de inicialización para crear ambos entornos automáticamente.
-
----
-
-### 2. Módulo de Recepción de Mercancía
-Crea una pantalla para **recepción de artículos** en un taller de electrónica, donde se reciben:
-- Artículos nuevos.
-- Artículos usados para reparación.
-
-Cada entrada puede incluir **muchos productos de diferentes marcas y modelos**.
-
-#### Campos requeridos:
-- Fecha de recepción.
-- Tipo de artículo: Nuevo / Usado.
-- Marca (select).
-- Modelo (select dependiente de la marca).
-- Categoría.
-- Cantidad.
-- Número de serie (opcional para nuevos, obligatorio para usados; si no existe, generar automáticamente).
-- Ubicación destino (almacén/taller).
-- Observaciones.
-- Documentos/fotos adjuntos (factura, guía, evidencia visual).
-
-#### Funcionalidades:
-- Agregar múltiples productos en una sola entrada (tabla dinámica).
-- Validar seriales según tipo.
-- Guardar entrada en base de datos.
-- Generar comprobante PDF con espacio para firma de quien entrega y quien recibe.
-- Mostrar historial de entradas con filtros por fecha, marca, modelo y tipo.
-
-#### Backend Django:
-Modelos:
-```python
-class EntradaProducto(models.Model):
-    marca = models.ForeignKey(Marca, on_delete=models.CASCADE)
-    modelo = models.ForeignKey(Modelo, on_delete=models.CASCADE)
-    categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE)
-    tipo = models.CharField(max_length=20, choices=[("nuevo","Nuevo"),("usado","Usado/Reparación")])
-    cantidad = models.PositiveIntegerField()
-    seriales = models.JSONField(default=list, blank=True)
-    ubicacion = models.ForeignKey(Ubicacion, on_delete=models.CASCADE)
-    observaciones = models.TextField(blank=True)
-    fecha_entrada = models.DateTimeField(auto_now_add=True)
-    registrado_por = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --pull always --wait

@@ -207,40 +207,44 @@ export default function ReceptionPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {groupedHistory.map((g) => (
-                <tr key={g.receptionId} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 text-sm font-medium text-brand-800">{g.receptionId}</td>
-                  <td className="px-3 py-2 text-sm text-gray-500">
-                    {g.fecha ? new Date(g.fecha).toLocaleDateString('es-DO') : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-sm text-gray-900">{g.ubicacion}</td>
-                  <td className="px-3 py-2 text-sm text-gray-900">
-                    {g.entregadoPor}
-                    {g.rangoCargo && <span className="ml-1 text-xs text-gray-400">({g.rangoCargo})</span>}
-                  </td>
-                  <td className="px-3 py-2 text-sm text-gray-900">{g.recibidoPor}</td>
-                  <td className="px-3 py-2 text-sm text-gray-900">{g.lineas}</td>
-                  <td className="px-3 py-2 text-sm text-gray-900">{g.totalItems}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => downloadReceipt(g.receptionId)}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-900"
-                      >
-                        <DocumentArrowDownIcon className="h-4 w-4" />
-                        Comprobante
-                      </button>
-                      {g.comprobantesFirmados.length > 0 && (
-                        <button
-                          onClick={() => downloadSignedAttachment(g.comprobantesFirmados[0], g.receptionId)}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-900"
-                        >
-                          <DocumentArrowDownIcon className="h-4 w-4" />
-                          Firmado
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                    <tr key={g.receptionId} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm font-medium text-brand-800">
+                        <Link to={`/reception/${g.receptionId}`} className="hover:underline">
+                          {g.receptionId}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-500">
+                        {g.fecha ? new Date(g.fecha).toLocaleDateString('es-DO') : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{g.ubicacion}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">
+                        {g.entregadoPor}
+                        {g.rangoCargo && <span className="ml-1 text-xs text-gray-400">({g.rangoCargo})</span>}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{g.recibidoPor}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{g.lineas}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{g.totalItems}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => downloadReceipt(g.receptionId)}
+                            className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-900"
+                          >
+                            <DocumentArrowDownIcon className="h-4 w-4" />
+                            Comprobante
+                          </button>
+                          {g.comprobantesFirmados.length > 0 && (
+                            <button
+                              onClick={() => downloadSignedAttachment(g.comprobantesFirmados[0], g.receptionId)}
+                              className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-900"
+                            >
+                              <DocumentArrowDownIcon className="h-4 w-4" />
+                              Firmado
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
               ))}
               {groupedHistory.length === 0 && (
                 <tr>

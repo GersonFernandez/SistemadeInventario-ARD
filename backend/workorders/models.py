@@ -196,6 +196,37 @@ class LineaDespacho(DirtyFieldsMixin, models.Model):
         return self.item_unit_id is not None
 
 
+class DespachoAttachment(models.Model):
+    class AttachmentType(models.TextChoices):
+        EVIDENCIA = 'evidencia', 'Evidencia'
+        COMPROBANTE = 'comprobante', 'Comprobante'
+
+    despacho = models.ForeignKey(
+        Despacho,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+    )
+    file = models.FileField(upload_to='despachos/attachments/%Y/%m/%d/')
+    attachment_type = models.CharField(max_length=20, choices=AttachmentType.choices)
+    description = models.CharField(max_length=255, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='despacho_attachments_uploaded',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'adjunto de despacho'
+        verbose_name_plural = 'adjuntos de despacho'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.despacho.ot_number} - {self.attachment_type}"
+
+
 class ServiceOrder(DirtyFieldsMixin, models.Model):
     """Orden de servicio técnico para equipos registrados en inventario."""
 
@@ -292,6 +323,12 @@ class ServiceOrder(DirtyFieldsMixin, models.Model):
     received_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
+    signed_receipt = models.FileField(
+        upload_to='service_orders/signed_receipts/%Y/%m/%d/',
+        null=True,
+        blank=True,
+        help_text='Comprobante de cierre firmado por el destinatario.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

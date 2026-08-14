@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ArrowLeftIcon, XCircleIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { despachoApi } from '../services/workOrderApi'
+import { getMediaUrl } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
 import { hasPermission } from '../utils/permissions'
 
@@ -22,6 +23,9 @@ export default function DespachoDetailPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [evidenceFiles, setEvidenceFiles] = useState([])
+  const [receiptFiles, setReceiptFiles] = useState([])
+  const [uploadingAttachments, setUploadingAttachments] = useState(false)
 
   useEffect(() => {
     fetchDespacho()
@@ -64,6 +68,46 @@ export default function DespachoDetailPage() {
     if (!despacho) return false
     if (despacho.status === 'cancelled') return false
     return canManage
+  }
+
+  const evidenceAttachments = (despacho?.attachments || []).filter((a) => a.attachment_type === 'evidencia')
+  const receiptAttachments = (despacho?.attachments || []).filter((a) => a.attachment_type === 'comprobante')
+
+  const openAttachment = (attachment) => {
+    const path = attachment.file_url || attachment.file
+    if (!path) {
+      toast.error('El adjunto no tiene una URL válida')
+      return
+    }
+    const a = document.createElement('a')
+    a.href = getMediaUrl(path)
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.download = `despacho_${despacho.ot_number}_${attachment.id}`
+    a.click()
+  }
+
+  const uploadAttachments = async () => {
+    if (!evidenceFiles.length && !receiptFiles.length) {
+      toast.error('Seleccione al menos un archivo de evidencia o comprobante')
+      return
+    }
+
+    setUploadingAttachments(true)
+    try {
+      await despachoApi.uploadAttachments(id, {
+        evidences: evidenceFiles,
+        receipts: receiptFiles,
+      })
+      toast.success('Adjuntos cargados correctamente')
+      setEvidenceFiles([])
+      setReceiptFiles([])
+      await fetchDespacho()
+    } catch {
+      toast.error('No se pudieron subir los adjuntos del despacho')
+    } finally {
+      setUploadingAttachments(false)
+    }
   }
 
   const handleDownloadReceipt = async () => {
@@ -156,6 +200,83 @@ export default function DespachoDetailPage() {
             </div>
           )}
         </dl>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h3 className="mb-4 text-lg font-medium text-gray-900">Adjuntos del despacho</h3>
+
+        {canManage && (
+          <div className="mb-5 rounded-md border border-gray-200 bg-gray-50 p-4">
+            <p className="mb-3 text-sm font-medium text-gray-800">Subir evidencias y comprobantes</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Evidencias</label>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(e) => setEvidenceFiles(Array.from(e.target.files || []))}
+                  className="mt-1 w-full text-sm text-gray-700"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Comprobantes</label>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(e) => setReceiptFiles(Array.from(e.target.files || []))}
+                  className="mt-1 w-full text-sm text-gray-700"
+                />
+              </div>
+            </div>
+            <button
+              onClick={uploadAttachments}
+              disabled={uploadingAttachments}
+              className="mt-3 inline-flex items-center rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50"
+            >
+              {uploadingAttachments ? 'Subiendo...' : 'Subir adjuntos'}
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-md border border-gray-200 p-3">
+            <h4 className="mb-2 text-sm font-semibold text-gray-800">Evidencias ({evidenceAttachments.length})</h4>
+            {evidenceAttachments.length === 0 ? (
+              <p className="text-sm text-gray-500">Sin evidencias adjuntas.</p>
+            ) : (
+              <div className="space-y-2">
+                {evidenceAttachments.map((att) => (
+                  <button
+                    key={att.id}
+                    onClick={() => openAttachment(att)}
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Evidencia #{att.id} · {att.created_at ? new Date(att.created_at).toLocaleString('es-DO') : '—'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+            <h4 className="mb-2 text-sm font-semibold text-emerald-900">Comprobantes ({receiptAttachments.length})</h4>
+            {receiptAttachments.length === 0 ? (
+              <p className="text-sm text-emerald-800">Sin comprobantes adjuntos.</p>
+            ) : (
+              <div className="space-y-2">
+                {receiptAttachments.map((att) => (
+                  <button
+                    key={att.id}
+                    onClick={() => openAttachment(att)}
+                    className="w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm text-emerald-800 hover:bg-emerald-100"
+                  >
+                    Comprobante #{att.id} · {att.created_at ? new Date(att.created_at).toLocaleString('es-DO') : '—'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm">

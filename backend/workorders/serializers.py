@@ -5,6 +5,7 @@ from utils.validators import normalize_dominican_cedula
 from .models import (
     Despacho,
     LineaDespacho,
+    DespachoAttachment,
     Solicitante,
     ServiceOrder,
     ServiceOrderLog,
@@ -101,6 +102,7 @@ class DespachoDetailSerializer(serializers.ModelSerializer):
     cancelled_by_name = serializers.CharField(source='cancelled_by.name', read_only=True, default=None)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     lineas = LineaDespachoSerializer(many=True, read_only=True)
+    attachments = serializers.SerializerMethodField()
     lineas_count = serializers.SerializerMethodField()
     total_items = serializers.SerializerMethodField()
 
@@ -114,7 +116,7 @@ class DespachoDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'issued_at', 'cancelled_at', 'cancelled_by', 'cancelled_by_name', 'cancellation_reason',
             'equipment_reference', 'notes',
-            'lineas', 'lineas_count', 'total_items',
+            'lineas', 'attachments', 'lineas_count', 'total_items',
         ]
         read_only_fields = [
             'id', 'ot_number', 'delivered_by', 'issued_at',
@@ -126,6 +128,21 @@ class DespachoDetailSerializer(serializers.ModelSerializer):
 
     def get_total_items(self, obj):
         return sum(linea.quantity for linea in obj.lineas.all())
+
+    def get_attachments(self, obj):
+        return DespachoAttachmentSerializer(obj.attachments.all(), many=True, context=self.context).data
+
+
+class DespachoAttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.FileField(source='file', read_only=True)
+
+    class Meta:
+        model = DespachoAttachment
+        fields = [
+            'id', 'despacho', 'file', 'file_url', 'attachment_type',
+            'description', 'uploaded_by', 'created_at',
+        ]
+        read_only_fields = ['id', 'uploaded_by', 'created_at', 'file_url']
 
 
 class DespachoCreateSerializer(serializers.ModelSerializer):
@@ -157,6 +174,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     history = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
     grouped_items = serializers.SerializerMethodField()
+    signed_receipt_url = serializers.SerializerMethodField()
 
     write_items = serializers.ListField(
         child=serializers.DictField(),
@@ -279,6 +297,11 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
             grouped[key]['count'] += 1
         return list(grouped.values())
 
+    def get_signed_receipt_url(self, obj):
+        if obj.signed_receipt:
+            return obj.signed_receipt.url
+        return None
+
     class Meta:
         model = ServiceOrder
         fields = [
@@ -294,6 +317,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
             'recipient_id_card', 'recipient_rank_position',
             'status', 'status_display',
             'diagnosis', 'work_performed', 'notes',
+            'signed_receipt', 'signed_receipt_url',
             'items', 'grouped_items', 'write_items',
             'logs',
             'history',

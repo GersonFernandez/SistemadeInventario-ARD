@@ -119,6 +119,17 @@ export const inventoryApi = {
   getProductEntryAttachments: (receptionId, params = {}) => api.get('/inventory/product-entries/attachments/', {
     params: { reception_id: receptionId, ...params },
   }),
+  uploadProductEntryAttachments: (receptionId, files = {}) => {
+    const formData = new FormData()
+    formData.append('reception_id', receptionId)
+    ;(files.photos || []).forEach((file) => formData.append('photos', file))
+    ;(files.documents || []).forEach((file) => formData.append('documents', file))
+    ;(files.signedReceipt || []).forEach((file) => formData.append('signed_receipt', file))
+
+    return api.post('/inventory/product-entries/upload_attachments/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   uploadSignedReceipt: (receptionId, files = []) => {
     const formData = new FormData()
     formData.append('reception_id', receptionId)

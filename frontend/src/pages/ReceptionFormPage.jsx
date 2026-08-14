@@ -215,8 +215,20 @@ export default function ReceptionFormPage() {
       const { data } = await inventoryApi.createProductEntryBatch(payload, { photos, documents, signedReceipt })
       toast.success(`Recepción registrada: ${data.reception_id}`)
       setLastSavedId(data.reception_id)
-      await downloadReceipt(data.reception_id)
-      await loadSignedAttachments(data.reception_id)
+
+      // Las acciones posteriores no deben marcar la recepción como fallida.
+      try {
+        await downloadReceipt(data.reception_id)
+      } catch {
+        toast.error('La recepción se guardó, pero no se pudo descargar el comprobante')
+      }
+
+      try {
+        await loadSignedAttachments(data.reception_id)
+      } catch {
+        // Si no se pueden leer adjuntos, mantenemos el guardado exitoso.
+      }
+
       setFechaRecepcion(new Date().toISOString().slice(0, 16))
       setObservaciones('')
       setEntregadoPorNombre('')

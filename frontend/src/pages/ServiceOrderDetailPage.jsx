@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ArrowLeftIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { serviceOrderApi } from '../services/serviceOrderApi'
+import { getMediaUrl } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
 import { downloadBlob } from '../utils/download'
 import { hasPermission } from '../utils/permissions'
@@ -26,6 +27,8 @@ export default function ServiceOrderDetailPage() {
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [completing, setCompleting] = useState(false)
+  const [signedReceiptFile, setSignedReceiptFile] = useState(null)
+  const [uploadingSignedReceipt, setUploadingSignedReceipt] = useState(false)
   const [statusDraft, setStatusDraft] = useState('')
   const [completionOrderOpen, setCompletionOrderOpen] = useState(false)
   const [completionForm, setCompletionForm] = useState({
@@ -137,6 +140,25 @@ export default function ServiceOrderDetailPage() {
     }
   }
 
+  const handleUploadSignedReceipt = async () => {
+    if (!order || !signedReceiptFile) {
+      toast.error('Seleccione el comprobante firmado')
+      return
+    }
+
+    setUploadingSignedReceipt(true)
+    try {
+      await serviceOrderApi.uploadSignedReceipt(order.id, signedReceiptFile)
+      toast.success('Comprobante firmado registrado')
+      setSignedReceiptFile(null)
+      fetchOrder()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'No se pudo subir el comprobante firmado')
+    } finally {
+      setUploadingSignedReceipt(false)
+    }
+  }
+
   if (loading) return <p className="text-gray-600">Cargando...</p>
   if (!order) return <p className="text-gray-600">Orden de servicio no encontrada.</p>
 
@@ -232,6 +254,44 @@ export default function ServiceOrderDetailPage() {
                 <dd className="mt-1 text-sm text-gray-900">{order.recipient_rank_position || '—'}</dd>
               </div>
             </dl>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">Comprobante firmado</h3>
+
+            {order.signed_receipt_url ? (
+              <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-sm text-emerald-900">Comprobante firmado registrado.</p>
+                <a
+                  href={getMediaUrl(order.signed_receipt_url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                >
+                  Descargar firmado
+                </a>
+              </div>
+            ) : (
+              <p className="mb-3 text-sm text-amber-700">Aún no se ha registrado el comprobante firmado.</p>
+            )}
+
+            {canOperateOrder(order) && (
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  onChange={(e) => setSignedReceiptFile(e.target.files?.[0] || null)}
+                  className="text-sm text-gray-700"
+                />
+                <button
+                  type="button"
+                  onClick={handleUploadSignedReceipt}
+                  disabled={uploadingSignedReceipt || !signedReceiptFile}
+                  className="inline-flex items-center rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900 disabled:opacity-50"
+                >
+                  {uploadingSignedReceipt ? 'Subiendo...' : 'Registrar comprobante firmado'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">

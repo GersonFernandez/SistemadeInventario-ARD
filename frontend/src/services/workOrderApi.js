@@ -16,6 +16,15 @@ export const despachoApi = {
     params: { type: format, ...params },
     responseType: 'blob',
   }),
+  getAttachments: (id, params = {}) => api.get(`/work-orders/despachos/${id}/attachments/`, { params }),
+  uploadAttachments: (id, files = {}) => {
+    const formData = new FormData()
+    ;(files.evidences || []).forEach((file) => formData.append('evidences', file))
+    ;(files.receipts || []).forEach((file) => formData.append('receipts', file))
+    return api.post(`/work-orders/despachos/${id}/upload_attachments/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 export const solicitanteApi = {

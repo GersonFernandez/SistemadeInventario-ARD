@@ -40,7 +40,15 @@ def _fit_box(width, height, max_width, max_height):
     return width * scale, height * scale
 
 
-def _build_pdf_response(title, headers, rows, include_signatures=False, signature_names=None, metadata_lines=None):
+def _build_pdf_response(
+    title,
+    headers,
+    rows,
+    include_signatures=False,
+    signature_names=None,
+    metadata_lines=None,
+    receipt_mode=False,
+):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
     styles = getSampleStyleSheet()
@@ -74,8 +82,11 @@ def _build_pdf_response(title, headers, rows, include_signatures=False, signatur
         Paragraph("ARMADA DE REPÚBLICA DOMINICANA", heading_style),
         Paragraph("TALLER DE ELECTRÓNICA, ARD", heading_style),
         Paragraph(title, subheading_style),
-        Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_center_style),
     ]
+    if not receipt_mode:
+        header_text.append(
+            Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_center_style)
+        )
     if header_logo:
         elements.append(header_logo)
         elements.append(Spacer(1, 8))
@@ -123,7 +134,7 @@ def _build_pdf_response(title, headers, rows, include_signatures=False, signatur
     return buffer
 
 
-def _build_excel_response(title, headers, rows):
+def _build_excel_response(title, headers, rows, receipt_mode=False):
     buffer = io.BytesIO()
     wb = Workbook()
     ws = wb.active
@@ -168,9 +179,10 @@ def _build_excel_response(title, headers, rows):
     ws[f'{title_start_column}{first_title_row + 2}'].font = Font(bold=True, size=12)
     ws[f'{title_start_column}{first_title_row + 2}'].alignment = Alignment(horizontal='center')
 
-    ws.merge_cells(f"{title_start_column}{first_title_row + 3}:{end_column}{first_title_row + 3}")
-    ws[f'{title_start_column}{first_title_row + 3}'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-    ws[f'{title_start_column}{first_title_row + 3}'].alignment = Alignment(horizontal='center')
+    if not receipt_mode:
+        ws.merge_cells(f"{title_start_column}{first_title_row + 3}:{end_column}{first_title_row + 3}")
+        ws[f'{title_start_column}{first_title_row + 3}'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws[f'{title_start_column}{first_title_row + 3}'].alignment = Alignment(horizontal='center')
 
     header_row = first_title_row + 6
     for col, header in enumerate(headers, 1):
@@ -191,7 +203,16 @@ def _build_excel_response(title, headers, rows):
     return buffer
 
 
-def build_report(title, headers, rows, format='pdf', include_signatures=False, signature_names=None, metadata_lines=None):
+def build_report(
+    title,
+    headers,
+    rows,
+    format='pdf',
+    include_signatures=False,
+    signature_names=None,
+    metadata_lines=None,
+    receipt_mode=False,
+):
     if format == 'pdf':
         return _build_pdf_response(
             title,
@@ -200,7 +221,8 @@ def build_report(title, headers, rows, format='pdf', include_signatures=False, s
             include_signatures=include_signatures,
             signature_names=signature_names,
             metadata_lines=metadata_lines,
+            receipt_mode=receipt_mode,
         )
     elif format == 'excel':
-        return _build_excel_response(title, headers, rows)
+        return _build_excel_response(title, headers, rows, receipt_mode=receipt_mode)
     raise ValueError("Format must be 'pdf' or 'excel'")
