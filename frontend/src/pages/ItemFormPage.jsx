@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { inventoryApi, getMediaUrl } from '../services/inventoryApi'
 import { productApi } from '../services/productApi'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 
 const documentTypes = [
   { value: 'oficio', label: 'Oficio' },
@@ -18,12 +19,12 @@ export default function ItemFormPage() {
   const navigate = useNavigate()
   const isEditing = Boolean(id)
 
-  const [categories, setCategories]     = useState([])
-  const [brands, setBrands]             = useState([])
-  const [models, setModels]             = useState([])
   const [states, setStates]             = useState([])
   const [unitMeasures, setUnitMeasures] = useState([])
-  const [locations, setLocations]       = useState([])
+  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [selectedBrand, setSelectedBrand] = useState(null)
+  const [selectedModel, setSelectedModel] = useState(null)
+  const [selectedLocation, setSelectedLocation] = useState(null)
   const [loading, setLoading]           = useState(isEditing)
   const [saving, setSaving]             = useState(false)
   const [imageFile, setImageFile]       = useState(null)
@@ -55,26 +56,16 @@ export default function ItemFormPage() {
     document_file: null,
   })
 
-  const filteredModels = models.filter(
-    (m) => !form.brand || String(m.brand) === String(form.brand),
-  )
-
   useEffect(() => {
     const loadCatalogs = async () => {
       try {
-        const [c, b, s, u, l] = await Promise.all([
-          productApi.getCategories(),
-          productApi.getBrands({ is_active: true }),
+        const [s, u] = await Promise.all([
           productApi.getProductStates({ is_active: true }),
           productApi.getUnitMeasures({ is_active: true }),
-          productApi.getLocations({ page_size: 200 }),
         ])
         const norm = (r) => r.data.results ?? r.data
-        setCategories(norm(c))
-        setBrands(norm(b))
         setStates(norm(s))
         setUnitMeasures(norm(u))
-        setLocations(norm(l))
       } catch {
         toast.error('No se pudieron cargar los catálogos')
       }
@@ -82,12 +73,27 @@ export default function ItemFormPage() {
     loadCatalogs()
   }, [])
 
-  useEffect(() => {
-    if (!form.brand) { setModels([]); return }
-    productApi.getProductModels({ is_active: true, brand: form.brand })
-      .then((r) => setModels(r.data.results ?? r.data))
-      .catch(() => setModels([]))
-  }, [form.brand])
+  const searchCategories = async (query) => {
+    const { data } = await productApi.getCategories({ search: query, page_size: 50 })
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchBrands = async (query) => {
+    const { data } = await productApi.getBrands({ search: query, is_active: true, page_size: 50 })
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchModels = async (query) => {
+    const params = { search: query, is_active: true, page_size: 50 }
+    if (form.brand) params.brand = form.brand
+    const { data } = await productApi.getProductModels(params)
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchLocations = async (query) => {
+    const { data } = await productApi.getLocations({ search: query, page_size: 50 })
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
 
   useEffect(() => {
     if (isEditing) fetchItem()
@@ -113,6 +119,18 @@ export default function ItemFormPage() {
         unit: data.unit || '',
         is_active: data.is_active,
       })
+      if (data.category) {
+        setSelectedCategory({ id: data.category, name: data.category_name || `Categoría ${data.category}` })
+      }
+      if (data.brand) {
+        setSelectedBrand({ id: data.brand, name: data.brand_name || `Marca ${data.brand}` })
+      }
+      if (data.product_model) {
+        setSelectedModel({ id: data.product_model, name: data.product_model_name || `Modelo ${data.product_model}`, brand: data.brand || null })
+      }
+      if (data.location) {
+        setSelectedLocation({ id: data.location, name: data.location_name || `Ubicación ${data.location}`, breadcrumb: data.location_breadcrumb || data.location_name || null })
+      }
       if (data.image_url) setImagePreview(getMediaUrl(data.image_url))
     } catch {
       toast.error('Error al cargar el artículo')
@@ -129,6 +147,9 @@ export default function ItemFormPage() {
       [field]: val,
       ...(field === 'brand' ? { product_model: '' } : {}),
     }))
+    if (field === 'brand') {
+      setSelectedModel(null)
+    }
   }
 
   const handleImageChange = (e) => {
@@ -253,12 +274,21 @@ export default function ItemFormPage() {
           </Field>
 
           <Field label="Categoría" required>
-            <div className="mt-1 flex gap-2">
-              <select value={form.category} onChange={set('category')} required
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
-                <option value="">Seleccione…</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+            <div className="mt-1 flex gap-2 items-start">
+              <div className="flex-1">
+                <RemoteEntityPicker
+                  value={selectedCategory}
+                  onChange={(row) => {
+                    setSelectedCategory(row)
+                    setForm((prev) => ({ ...prev, category: row ? String(row.id) : '' }))
+                  }}
+                  fetchOptions={searchCategories}
+                  getLabel={(row) => row?.name || '—'}
+                  getMeta={(row) => row?.abbreviation || 'Sin abreviatura'}
+                  placeholder="Buscar categoría..."
+                  minChars={1}
+                />
+              </div>
               <Link to="/categories"
                 className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-600 hover:bg-gray-50"
                 title="Gestionar categorías">⚙</Link>
@@ -266,20 +296,39 @@ export default function ItemFormPage() {
           </Field>
 
           <Field label="Marca" required>
-            <select value={form.brand} onChange={set('brand')} required
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-              <option value="">Seleccione…</option>
-              {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <div className="mt-1">
+              <RemoteEntityPicker
+                value={selectedBrand}
+                onChange={(row) => {
+                  setSelectedBrand(row)
+                  setSelectedModel(null)
+                  setForm((prev) => ({ ...prev, brand: row ? String(row.id) : '', product_model: '' }))
+                }}
+                fetchOptions={searchBrands}
+                getLabel={(row) => row?.name || '—'}
+                getMeta={(row) => (row?.is_active ? 'Activa' : 'Inactiva')}
+                placeholder="Buscar marca..."
+                minChars={1}
+              />
+            </div>
           </Field>
 
           <Field label="Modelo" required>
-            <select value={form.product_model} onChange={set('product_model')} required
-              disabled={!form.brand}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500">
-              <option value="">{form.brand ? 'Seleccione…' : 'Seleccione marca primero…'}</option>
-              {filteredModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <div className="mt-1">
+              <RemoteEntityPicker
+                value={selectedModel}
+                onChange={(row) => {
+                  setSelectedModel(row)
+                  setForm((prev) => ({ ...prev, product_model: row ? String(row.id) : '' }))
+                }}
+                fetchOptions={searchModels}
+                getLabel={(row) => row?.name || '—'}
+                getMeta={(row) => row?.brand_name || 'Sin marca'}
+                placeholder={form.brand ? 'Buscar modelo...' : 'Seleccione marca primero...'}
+                minChars={1}
+                disabled={!form.brand}
+              />
+            </div>
           </Field>
 
           <Field label="Estado">
@@ -291,11 +340,20 @@ export default function ItemFormPage() {
           </Field>
 
           <Field label="Ubicación">
-            <select value={form.location} onChange={set('location')}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-              <option value="">Sin ubicación</option>
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.breadcrumb || l.name}</option>)}
-            </select>
+            <div className="mt-1">
+              <RemoteEntityPicker
+                value={selectedLocation}
+                onChange={(row) => {
+                  setSelectedLocation(row)
+                  setForm((prev) => ({ ...prev, location: row ? String(row.id) : '' }))
+                }}
+                fetchOptions={searchLocations}
+                getLabel={(row) => row?.breadcrumb || row?.name || '—'}
+                getMeta={(row) => row?.codigo || 'Sin código'}
+                placeholder="Buscar ubicación..."
+                minChars={1}
+              />
+            </div>
           </Field>
 
           <Field label="Tipo">

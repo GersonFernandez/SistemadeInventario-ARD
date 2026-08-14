@@ -14,6 +14,7 @@ import { serviceOrderApi } from '../services/serviceOrderApi'
 import { productApi } from '../services/productApi'
 import { userApi } from '../services/userApi'
 import ProductPickerField from '../components/ProductPickerField'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 
 const serviceTypeOptions = [
@@ -30,12 +31,14 @@ const emptyLine = {
   equipment_condition: 'usado',
 }
 
+const ITEMS_PAGE_SIZE = 120
+
 export default function ServiceOrderFormPage() {
   const navigate = useNavigate()
 
   const [items, setItems] = useState([])
-  const [locations, setLocations] = useState([])
-  const [technicians, setTechnicians] = useState([])
+  const [selectedTechnician, setSelectedTechnician] = useState(null)
+  const [selectedUnit, setSelectedUnit] = useState(null)
   const [saving, setSaving] = useState(false)
   const [recipientIdError, setRecipientIdError] = useState('')
 
@@ -54,22 +57,54 @@ export default function ServiceOrderFormPage() {
   useEffect(() => {
     const loadCatalogs = async () => {
       try {
-        const [itemsRes, usersRes, locationsRes] = await Promise.all([
-          productApi.getItems({ page_size: 300 }),
-          userApi.getUsers(),
-          productApi.getLocations({ page_size: 200 }),
+        const [itemsRes] = await Promise.all([
+          productApi.getItems({ page_size: ITEMS_PAGE_SIZE }),
         ])
-        const users = usersRes.data.results || usersRes.data
         const loadedItems = itemsRes.data.results || itemsRes.data
-        setItems(loadedItems.filter((i) => i.is_active !== false && i.is_base_product !== false))
-        setLocations(locationsRes.data.results || locationsRes.data)
-        setTechnicians(users.filter((u) => u.role === 'tecnico' && u.is_active))
+        const visibleItems = loadedItems
+          .filter((i) => i.is_active !== false && i.is_base_product !== false)
+          .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+        setItems(visibleItems)
       } catch {
-        toast.error('No se pudieron cargar productos, ubicaciones o técnicos')
+        toast.error('No se pudieron cargar los productos')
       }
     }
     loadCatalogs()
   }, [])
+
+  const searchProducts = async (query) => {
+    const { data } = await productApi.getItems({
+      search: query,
+      is_active: true,
+      page_size: 80,
+    })
+    const rows = data.results || data || []
+    return rows
+      .filter((i) => i.is_active !== false && i.is_base_product !== false)
+      .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchTechnicians = async (query) => {
+    const { data } = await userApi.getUsers({
+      search: query,
+      role: 'tecnico',
+      is_active: true,
+      page_size: 40,
+    })
+    const rows = data.results || data || []
+    return rows
+      .filter((u) => u.role === 'tecnico' && u.is_active)
+      .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchLocations = async (query) => {
+    const { data } = await productApi.getLocations({
+      search: query,
+      page_size: 50,
+    })
+    const rows = data.results || data || []
+    return rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
 
   const addLine = () => setForm((prev) => ({ ...prev, write_items: [...prev.write_items, { ...emptyLine }] }))
 
@@ -200,29 +235,37 @@ export default function ServiceOrderFormPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Técnico asignado</label>
-                <select
-                  value={form.assigned_technician}
-                  onChange={(e) => setForm({ ...form, assigned_technician: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Sin asignar</option>
-                  {technicians.map((tech) => (
-                    <option key={tech.id} value={tech.id}>{tech.name}</option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <RemoteEntityPicker
+                    value={selectedTechnician}
+                    onChange={(tech) => {
+                      setSelectedTechnician(tech)
+                      setForm((prev) => ({ ...prev, assigned_technician: tech ? String(tech.id) : '' }))
+                    }}
+                    fetchOptions={searchTechnicians}
+                    getLabel={(tech) => tech?.name || '—'}
+                    getMeta={(tech) => `${tech?.email || 'Sin correo'}${tech?.agent_id ? ` · ${tech.agent_id}` : ''}`}
+                    placeholder="Buscar técnico por nombre, correo o cédula..."
+                    minChars={1}
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Unidad solicitante</label>
-                <select
-                  value={form.unit}
-                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Sin unidad</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <RemoteEntityPicker
+                    value={selectedUnit}
+                    onChange={(loc) => {
+                      setSelectedUnit(loc)
+                      setForm((prev) => ({ ...prev, unit: loc ? String(loc.id) : '' }))
+                    }}
+                    fetchOptions={searchLocations}
+                    getLabel={(loc) => loc?.breadcrumb || loc?.name || '—'}
+                    getMeta={(loc) => loc?.codigo ? `Código: ${loc.codigo}` : 'Sin código'}
+                    placeholder="Buscar unidad/base por nombre o código..."
+                    minChars={1}
+                  />
+                </div>
               </div>
               <div className="md:col-span-1">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Observaciones generales</label>
@@ -320,6 +363,7 @@ export default function ServiceOrderFormPage() {
                             items={items}
                             line={line}
                             onPatch={(patch) => updateLine(index, patch)}
+                            remoteSearch={searchProducts}
                             modalTitle="Buscar producto"
                             modalSubtitle="Seleccione un producto para agregarlo a la orden de servicio."
                           />
@@ -413,7 +457,7 @@ export default function ServiceOrderFormPage() {
                 <dt className="text-gray-600">Técnico</dt>
                 <dd className="text-right font-medium text-gray-900">
                   {form.assigned_technician
-                    ? (technicians.find((t) => String(t.id) === form.assigned_technician)?.name || '—')
+                    ? (selectedTechnician?.name || '—')
                     : <span className="text-gray-400">Sin asignar</span>}
                 </dd>
               </div>

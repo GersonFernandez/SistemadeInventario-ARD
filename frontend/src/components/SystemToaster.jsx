@@ -32,9 +32,35 @@ const variants = {
   },
 }
 
+function sanitizeStringMessage(value) {
+  const raw = String(value || '').trim()
+  if (!raw) {
+    return 'Ocurrió un error inesperado. Intente nuevamente.'
+  }
+
+  const looksLikeCharSplitHtml = /<,\s*!?,?\s*[dDhH]/.test(raw) || /(?:^|\s)[a-zA-Z0-9],\s[a-zA-Z0-9],\s[a-zA-Z0-9],/.test(raw)
+  const looksLikeHtml = /<!doctype html|<html|<body|<head|<title/i.test(raw)
+
+  if (looksLikeCharSplitHtml || looksLikeHtml) {
+    return 'Ocurrió un error interno del servidor. Intente nuevamente o contacte al administrador.'
+  }
+
+  const withoutTags = raw.replace(/<[^>]+>/g, ' ')
+  const normalized = withoutTags.replace(/\s+/g, ' ').trim()
+
+  if (!normalized) {
+    return 'Ocurrió un error inesperado. Intente nuevamente.'
+  }
+
+  return normalized
+}
+
 function readableMessage(value) {
-  if (React.isValidElement(value) || typeof value === 'string' || typeof value === 'number') {
+  if (React.isValidElement(value)) {
     return value
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    return sanitizeStringMessage(value)
   }
   if (Array.isArray(value)) {
     return value.map(readableMessage).filter(Boolean).join(' ')

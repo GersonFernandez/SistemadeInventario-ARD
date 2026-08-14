@@ -2,6 +2,8 @@ from rest_framework import generics, viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter
 from django.contrib.auth import get_user_model
 from django.utils.crypto import get_random_string
 from django.core.mail import send_mail
@@ -128,11 +130,17 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     permission_classes = [permissions.IsAuthenticated, HasPermissionKey]
     required_permission_key = 'users.manage'
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ['role', 'is_active']
+    search_fields = ['name', 'email', 'agent_id']
 
     def get_serializer_class(self):
         if self.action == 'create':
             return UserCreateSerializer
         return UserSerializer
+
+    def get_queryset(self):
+        return super().get_queryset().order_by('-id')
 
     def perform_destroy(self, instance):
         instance.is_active = False

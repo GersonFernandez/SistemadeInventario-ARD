@@ -13,6 +13,7 @@ import { despachoApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
 import SolicitantePicker from '../components/SolicitantePicker'
 import ItemSelector from '../components/ItemSelector'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 import { useAuth } from '../context/AuthContext'
 
 function buildLineKey(itemId, unitId) {
@@ -25,30 +26,32 @@ export default function DespachoFormPage() {
 
   const [solicitante, setSolicitante] = useState(null)
   const [unit, setUnit] = useState('')
+  const [selectedUnit, setSelectedUnit] = useState(null)
   const [equipmentReference, setEquipmentReference] = useState('')
   const [notes, setNotes] = useState('')
   const [lineas, setLineas] = useState([])
-  const [locations, setLocations] = useState([])
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    const loadLocations = async () => {
-      try {
-        const { data } = await inventoryApi.getLocations({ page_size: 300 })
-        setLocations(data.results || data)
-      } catch {
-        toast.error('No se pudieron cargar las ubicaciones para despacho')
-      }
-    }
-    loadLocations()
-  }, [])
 
   useEffect(() => {
     if (!solicitante || unit) return
     if (solicitante.unit) {
       setUnit(String(solicitante.unit))
+      setSelectedUnit({
+        id: solicitante.unit,
+        name: solicitante.unit_name || `Unidad ${solicitante.unit}`,
+        breadcrumb: solicitante.unit_name || null,
+      })
     }
   }, [solicitante, unit])
+
+  const searchLocations = async (query) => {
+    const { data } = await inventoryApi.getLocations({
+      search: query,
+      page_size: 50,
+    })
+    const rows = data.results || data || []
+    return rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
 
   const totalLineas = lineas.length
   const totalUnidades = useMemo(
@@ -210,16 +213,20 @@ export default function DespachoFormPage() {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Unidad / Base destino</label>
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Sin unidad específica</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <RemoteEntityPicker
+                    value={selectedUnit}
+                    onChange={(loc) => {
+                      setSelectedUnit(loc)
+                      setUnit(loc ? String(loc.id) : '')
+                    }}
+                    fetchOptions={searchLocations}
+                    getLabel={(loc) => loc?.breadcrumb || loc?.name || '—'}
+                    getMeta={(loc) => loc?.codigo ? `Código: ${loc.codigo}` : 'Sin código'}
+                    placeholder="Buscar unidad/base por nombre o código..."
+                    minChars={1}
+                  />
+                </div>
               </div>
 
               <div>

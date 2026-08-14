@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { inventoryApi, getMediaUrl } from '../services/inventoryApi'
 import ProductPickerField from '../components/ProductPickerField'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 
 const emptyLine = {
@@ -26,6 +27,8 @@ const emptyLine = {
   seriales_text: '',
   observaciones: '',
 }
+
+const ITEMS_PAGE_SIZE = 120
 
 export default function ReceptionFormPage() {
   const navigate = useNavigate()
@@ -42,7 +45,7 @@ export default function ReceptionFormPage() {
   const [documents, setDocuments] = useState([])
   const [signedReceipt, setSignedReceipt] = useState([])
   const [selectedLocation, setSelectedLocation] = useState('')
-  const [locations, setLocations] = useState([])
+  const [selectedLocationOption, setSelectedLocationOption] = useState(null)
   const [brands, setBrands] = useState([])
   const [models, setModels] = useState([])
   const [categories, setCategories] = useState([])
@@ -57,19 +60,12 @@ export default function ReceptionFormPage() {
     loadCatalogs()
   }, [])
 
-  useEffect(() => {
-    if (!selectedLocation && locations.length) {
-      setSelectedLocation(String(locations[0].id))
-    }
-  }, [locations, selectedLocation])
-
   const loadCatalogs = async () => {
     const requests = [
-      ['productos', inventoryApi.getItems({ is_active: true, is_base_product: true, for_reception: true, page_size: 300 }), setProducts],
+      ['productos', inventoryApi.getItems({ is_active: true, is_base_product: true, for_reception: true, page_size: ITEMS_PAGE_SIZE }), setProducts],
       ['marcas', inventoryApi.getBrands({ is_active: true }), setBrands],
       ['modelos', inventoryApi.getProductModels({ is_active: true }), setModels],
       ['categorías', inventoryApi.getCategories(), setCategories],
-      ['ubicaciones', inventoryApi.getLocations({ page_size: 200 }), setLocations],
     ]
     const results = await Promise.allSettled(requests.map(([, req]) => req))
     results.forEach((result, idx) => {
@@ -80,6 +76,29 @@ export default function ReceptionFormPage() {
         setData([])
       }
     })
+  }
+
+  const searchLocations = async (query) => {
+    const { data } = await inventoryApi.getLocations({
+      search: query,
+      page_size: 50,
+    })
+    const rows = data.results || data || []
+    return rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchProducts = async (query) => {
+    const { data } = await inventoryApi.getItems({
+      search: query,
+      is_active: true,
+      is_base_product: true,
+      for_reception: true,
+      page_size: 80,
+    })
+    const rows = data.results || data || []
+    return rows
+      .filter((i) => i.is_active !== false && i.is_base_product !== false)
+      .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
   }
 
   const addLine = () => setLineas((prev) => [...prev, { ...emptyLine }])
@@ -323,12 +342,20 @@ export default function ReceptionFormPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Ubicación de almacenamiento</label>
-                <select value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
-                  <option value="">Seleccione una ubicación</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <RemoteEntityPicker
+                    value={selectedLocationOption}
+                    onChange={(loc) => {
+                      setSelectedLocationOption(loc)
+                      setSelectedLocation(loc ? String(loc.id) : '')
+                    }}
+                    fetchOptions={searchLocations}
+                    getLabel={(loc) => loc?.breadcrumb || loc?.name || '—'}
+                    getMeta={(loc) => loc?.codigo ? `Código: ${loc.codigo}` : 'Sin código'}
+                    placeholder="Buscar ubicación por nombre o código..."
+                    minChars={1}
+                  />
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Observaciones generales</label>
@@ -364,6 +391,7 @@ export default function ReceptionFormPage() {
                             items={products}
                             line={line}
                             onPatch={(patch) => updateLine(index, patch)}
+                            remoteSearch={searchProducts}
                             onSelectExtraPatch={(product) => ({
                               marca: product.brand || '',
                               modelo: product.product_model || '',
@@ -465,10 +493,8 @@ export default function ReceptionFormPage() {
               <div className="flex items-start justify-between gap-3">
                 <dt className="text-gray-600">Ubicación</dt>
                 <dd className="text-right font-medium text-gray-900">
-                  {selectedLocation
-                    ? (locations.find((l) => String(l.id) === selectedLocation)?.breadcrumb
-                      || locations.find((l) => String(l.id) === selectedLocation)?.name
-                      || '—')
+                  {selectedLocationOption
+                    ? (selectedLocationOption.breadcrumb || selectedLocationOption.name || '—')
                     : <span className="text-gray-400">Sin seleccionar</span>}
                 </dd>
               </div>

@@ -8,6 +8,7 @@ import uuid
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.filters import SearchFilter
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, NumberFilter
 from django_filters import rest_framework as django_filters
 from utils.reports import build_report
@@ -199,6 +200,8 @@ class LocationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
     view_permission_key = 'locations.view'
     manage_permission_key = 'locations.manage'
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    search_fields = ['name', 'codigo', 'location_type__name']
 
     def get_queryset(self):
         queryset = super().get_queryset()

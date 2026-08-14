@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { solicitanteApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 import { useAuth } from '../context/AuthContext'
 import { hasPermission } from '../utils/permissions'
 
@@ -20,7 +21,7 @@ export default function SolicitantesPage() {
   const canManage = hasPermission(user, 'solicitantes.manage', ['admin', 'almacenista'])
 
   const [solicitantes, setSolicitantes] = useState([])
-  const [locations, setLocations]       = useState([])
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState(null)
   const [loading, setLoading]           = useState(true)
   const [totalCount, setTotalCount]     = useState(0)
   const [page, setPage]                 = useState(1)
@@ -32,16 +33,11 @@ export default function SolicitantesPage() {
 
   const totalPages  = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
-  const rankOptions = useMemo(() => {
-    const set = new Set(solicitantes.map((s) => (s.rank || '').trim()).filter(Boolean))
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
-  }, [solicitantes])
-
-  useEffect(() => {
-    inventoryApi.getLocations({ page_size: 300 })
-      .then((r) => setLocations(r.data.results || r.data))
-      .catch(() => {})
-  }, [])
+  const searchLocations = async (query) => {
+    const { data } = await inventoryApi.getLocations({ search: query, page_size: 50 })
+    const rows = data.results || data || []
+    return rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
 
   useEffect(() => { setPage(1); load(1) }, [statusFilter, unitFilter, rankFilter])
 
@@ -68,6 +64,7 @@ export default function SolicitantesPage() {
 
   const handleReset = () => {
     setSearch(''); setStatusFilter('true'); setUnitFilter(''); setRankFilter('')
+    setSelectedUnitFilter(null)
     setPage(1); load(1)
   }
 
@@ -145,14 +142,26 @@ export default function SolicitantesPage() {
               className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-brand-700 focus:outline-none"
             />
           </div>
-          <select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
-            <option value="">Todas las unidades</option>
-            {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.breadcrumb || loc.name}</option>)}
-          </select>
-          <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
-            <option value="">Todos los rangos</option>
-            {rankOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <div className="min-w-[240px]">
+            <RemoteEntityPicker
+              value={selectedUnitFilter}
+              onChange={(loc) => {
+                setSelectedUnitFilter(loc)
+                setUnitFilter(loc ? String(loc.id) : '')
+              }}
+              fetchOptions={searchLocations}
+              getLabel={(loc) => loc?.breadcrumb || loc?.name || '—'}
+              getMeta={(loc) => loc?.codigo || 'Sin código'}
+              placeholder="Filtrar por unidad/base..."
+              minChars={1}
+            />
+          </div>
+          <input
+            value={rankFilter}
+            onChange={(e) => setRankFilter(e.target.value)}
+            placeholder="Filtrar por rango"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
             <option value="true">Solo activos</option>
             <option value="false">Solo inactivos</option>

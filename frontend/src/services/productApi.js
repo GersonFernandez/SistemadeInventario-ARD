@@ -9,7 +9,7 @@ export const productApi = {
   updateItem: (id, data) => api.patch(`/products/items/${id}/`, data),
   deleteItem: (id) => api.patch(`/products/items/${id}/`, { is_active: false }),
 
-  getCategories: () => api.get('/products/categories/'),
+  getCategories: (params = {}) => api.get('/products/categories/', { params }),
   createCategory: (data) => api.post('/products/categories/', data),
 
   getBrands: (params = {}) => api.get('/products/brands/', { params }),

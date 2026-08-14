@@ -21,6 +21,11 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [permissions.IsAuthenticated, IsAlmacenistaOrAdmin]
+    filter_backends = [SearchFilter]
+    search_fields = ['name', 'abbreviation', 'description']
+
+    def get_queryset(self):
+        return super().get_queryset().order_by('name')
 
 
 class ProductBrandViewSet(viewsets.ModelViewSet):
@@ -95,6 +100,8 @@ class ProductLocationViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Location.objects.select_related('location_type', 'parent').all()
     serializer_class = LocationSimpleSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [SearchFilter]
+    search_fields = ['name', 'codigo', 'location_type__name']
 
 
 class ProductItemViewSet(viewsets.ModelViewSet):

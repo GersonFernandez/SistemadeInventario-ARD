@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { solicitanteApi } from '../services/workOrderApi'
 import { inventoryApi } from '../services/inventoryApi'
 import { useAuth } from '../context/AuthContext'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 import { DOMINICAN_CEDULA_ERROR, formatDominicanCedula, isValidDominicanCedula } from '../utils/dominicanCedula'
 import { hasPermission } from '../utils/permissions'
 
@@ -25,8 +26,7 @@ export default function SolicitanteFormPage() {
 
   const [loading, setLoading] = useState(isEditing)
   const [saving, setSaving] = useState(false)
-  const [locationsLoading, setLocationsLoading] = useState(true)
-  const [locations, setLocations] = useState([])
+  const [selectedUnit, setSelectedUnit] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [cedulaError, setCedulaError] = useState('')
 
@@ -37,28 +37,23 @@ export default function SolicitanteFormPage() {
       return
     }
 
-    loadLocations()
     if (isEditing) {
       loadSolicitante()
     }
   }, [id, canManage])
 
   const selectedLocationLabel = useMemo(() => {
-    if (!form.unit) return 'Sin unidad asignada'
-    const found = locations.find((loc) => String(loc.id) === String(form.unit))
-    return found?.breadcrumb || found?.name || 'Sin unidad asignada'
-  }, [form.unit, locations])
+    if (!selectedUnit) return 'Sin unidad asignada'
+    return selectedUnit.breadcrumb || selectedUnit.name || 'Sin unidad asignada'
+  }, [selectedUnit])
 
-  const loadLocations = async () => {
-    setLocationsLoading(true)
-    try {
-      const { data } = await inventoryApi.getLocations({ page_size: 300 })
-      setLocations(data.results || data)
-    } catch {
-      toast.error('No se pudieron cargar las ubicaciones')
-    } finally {
-      setLocationsLoading(false)
-    }
+  const searchLocations = async (query) => {
+    const { data } = await inventoryApi.getLocations({
+      search: query,
+      page_size: 50,
+    })
+    const rows = data.results || data || []
+    return rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
   }
 
   const loadSolicitante = async () => {
@@ -72,6 +67,13 @@ export default function SolicitanteFormPage() {
         notes: data.notes || '',
         is_active: Boolean(data.is_active),
       })
+      if (data.unit) {
+        setSelectedUnit({
+          id: data.unit,
+          name: data.unit_name || `Unidad ${data.unit}`,
+          breadcrumb: data.unit_name || null,
+        })
+      }
     } catch {
       toast.error('No se pudo cargar el solicitante')
       navigate('/solicitantes')
@@ -230,19 +232,20 @@ export default function SolicitanteFormPage() {
             <div className="mt-5 grid grid-cols-1 gap-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Unidad / Base</label>
-                <select
-                  value={form.unit}
-                  onChange={(e) => updateField('unit', e.target.value)}
-                  disabled={locationsLoading}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-brand-700 disabled:bg-gray-100"
-                >
-                  <option value="">Sin unidad</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.breadcrumb || loc.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <RemoteEntityPicker
+                    value={selectedUnit}
+                    onChange={(loc) => {
+                      setSelectedUnit(loc)
+                      updateField('unit', loc ? String(loc.id) : '')
+                    }}
+                    fetchOptions={searchLocations}
+                    getLabel={(loc) => loc?.breadcrumb || loc?.name || '—'}
+                    getMeta={(loc) => loc?.codigo ? `Código: ${loc.codigo}` : 'Sin código'}
+                    placeholder="Buscar unidad/base por nombre o código..."
+                    minChars={1}
+                  />
+                </div>
               </div>
 
               <div>

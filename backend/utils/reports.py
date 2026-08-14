@@ -78,11 +78,7 @@ def _build_pdf_response(
             # If image parsing fails, continue report generation without logo.
             header_logo = None
 
-    header_text = [
-        Paragraph("ARMADA DE REPÚBLICA DOMINICANA", heading_style),
-        Paragraph("TALLER DE ELECTRÓNICA, ARD", heading_style),
-        Paragraph(title, subheading_style),
-    ]
+    header_text = [Paragraph(title, heading_style)]
     if not receipt_mode:
         header_text.append(
             Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_center_style)
@@ -165,26 +161,16 @@ def _build_excel_response(title, headers, rows, receipt_mode=False):
     end_column_index = max(len(headers), column_index_from_string(title_start_column) + 3)
     end_column = get_column_letter(end_column_index)
     ws.merge_cells(f"{title_start_column}{first_title_row}:{end_column}{first_title_row}")
-    ws[f'{title_start_column}{first_title_row}'] = "ARMADA DE REPÚBLICA DOMINICANA"
+    ws[f'{title_start_column}{first_title_row}'] = title
     ws[f'{title_start_column}{first_title_row}'].font = Font(bold=True, size=14)
     ws[f'{title_start_column}{first_title_row}'].alignment = Alignment(horizontal='center')
 
-    ws.merge_cells(f"{title_start_column}{first_title_row + 1}:{end_column}{first_title_row + 1}")
-    ws[f'{title_start_column}{first_title_row + 1}'] = "TALLER DE ELECTRÓNICA, ARD"
-    ws[f'{title_start_column}{first_title_row + 1}'].font = Font(bold=True, size=12)
-    ws[f'{title_start_column}{first_title_row + 1}'].alignment = Alignment(horizontal='center')
-
-    ws.merge_cells(f"{title_start_column}{first_title_row + 2}:{end_column}{first_title_row + 2}")
-    ws[f'{title_start_column}{first_title_row + 2}'] = title
-    ws[f'{title_start_column}{first_title_row + 2}'].font = Font(bold=True, size=12)
-    ws[f'{title_start_column}{first_title_row + 2}'].alignment = Alignment(horizontal='center')
-
     if not receipt_mode:
-        ws.merge_cells(f"{title_start_column}{first_title_row + 3}:{end_column}{first_title_row + 3}")
-        ws[f'{title_start_column}{first_title_row + 3}'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        ws[f'{title_start_column}{first_title_row + 3}'].alignment = Alignment(horizontal='center')
+        ws.merge_cells(f"{title_start_column}{first_title_row + 1}:{end_column}{first_title_row + 1}")
+        ws[f'{title_start_column}{first_title_row + 1}'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws[f'{title_start_column}{first_title_row + 1}'].alignment = Alignment(horizontal='center')
 
-    header_row = first_title_row + 6
+    header_row = first_title_row + 4
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=header_row, column=col, value=header)
         cell.font = Font(bold=True, color='FFFFFF')

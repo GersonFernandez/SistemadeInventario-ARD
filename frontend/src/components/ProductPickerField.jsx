@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { getMediaUrl } from '../services/inventoryApi'
 
@@ -33,6 +33,7 @@ export default function ProductPickerField({
   onPatch,
   onSelectExtraPatch,
   onClearExtraPatch,
+  remoteSearch,
   placeholder = 'Buscar producto por nombre, marca, modelo o codigo',
   modalTitle = 'Buscar producto',
   modalSubtitle = 'Seleccione un producto para agregar.',
@@ -41,25 +42,113 @@ export default function ProductPickerField({
   const [showInlineResults, setShowInlineResults] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerQuery, setPickerQuery] = useState('')
+  const [inlineRemoteResults, setInlineRemoteResults] = useState([])
+  const [inlineSearching, setInlineSearching] = useState(false)
+  const [modalRemoteResults, setModalRemoteResults] = useState([])
+  const [modalSearching, setModalSearching] = useState(false)
+
+  useEffect(() => {
+    if (!showInlineResults || !remoteSearch) return
+
+    const q = (line.item_search || '').trim()
+    if (!q) {
+      setInlineRemoteResults([])
+      setInlineSearching(false)
+      return
+    }
+
+    let cancelled = false
+    setInlineSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const results = await remoteSearch(q)
+        if (!cancelled) {
+          setInlineRemoteResults(Array.isArray(results) ? results : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setInlineRemoteResults([])
+        }
+      } finally {
+        if (!cancelled) {
+          setInlineSearching(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [showInlineResults, line.item_search, remoteSearch])
+
+  useEffect(() => {
+    if (!pickerOpen || !remoteSearch) return
+
+    const q = pickerQuery.trim()
+    if (!q) {
+      setModalRemoteResults([])
+      setModalSearching(false)
+      return
+    }
+
+    let cancelled = false
+    setModalSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const results = await remoteSearch(q)
+        if (!cancelled) {
+          setModalRemoteResults(Array.isArray(results) ? results : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setModalRemoteResults([])
+        }
+      } finally {
+        if (!cancelled) {
+          setModalSearching(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [pickerOpen, pickerQuery, remoteSearch])
+
+  const itemPool = useMemo(() => {
+    const byId = new Map()
+    items.forEach((item) => byId.set(String(item.id), item))
+    inlineRemoteResults.forEach((item) => byId.set(String(item.id), item))
+    modalRemoteResults.forEach((item) => byId.set(String(item.id), item))
+    return Array.from(byId.values())
+  }, [items, inlineRemoteResults, modalRemoteResults])
 
   const selectedItem = useMemo(
-    () => items.find((item) => String(item.id) === String(line.item)) || null,
-    [items, line.item],
+    () => itemPool.find((item) => String(item.id) === String(line.item)) || null,
+    [itemPool, line.item],
   )
 
   const inlineResults = useMemo(() => {
     const q = (line.item_search || '').trim().toLowerCase()
     if (!q) return []
-    return items.filter((item) => buildSearchBucket(item).includes(q)).slice(0, 8)
-  }, [items, line.item_search])
+    if (remoteSearch) {
+      return inlineRemoteResults.slice(0, 8)
+    }
+    return itemPool.filter((item) => buildSearchBucket(item).includes(q)).slice(0, 8)
+  }, [inlineRemoteResults, itemPool, line.item_search, remoteSearch])
 
   const modalResults = useMemo(() => {
     const q = pickerQuery.trim().toLowerCase()
+    if (remoteSearch && q) {
+      return modalRemoteResults.slice(0, 80)
+    }
     const filtered = q
-      ? items.filter((item) => buildSearchBucket(item).includes(q))
-      : items
+      ? itemPool.filter((item) => buildSearchBucket(item).includes(q))
+      : itemPool
     return filtered.slice(0, 40)
-  }, [items, pickerQuery])
+  }, [itemPool, modalRemoteResults, pickerQuery, remoteSearch])
 
   const selectItem = (item) => {
     onPatch({
@@ -135,8 +224,11 @@ export default function ProductPickerField({
         </div>
       )}
 
-      {showInlineResults && inlineResults.length > 0 && (
+      {showInlineResults && (inlineSearching || inlineResults.length > 0) && (
         <div className="absolute z-20 mt-1 max-h-44 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+          {inlineSearching && (
+            <div className="px-2 py-2 text-xs text-gray-500">Buscando en base de datos...</div>
+          )}
           {inlineResults.map((item) => (
             <button
               key={item.id}
@@ -194,6 +286,11 @@ export default function ProductPickerField({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
+                    {modalSearching && (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-3 text-center text-gray-500">Buscando en base de datos...</td>
+                      </tr>
+                    )}
                     {modalResults.map((item) => (
                       <tr key={item.id}>
                         <td className="px-3 py-2 font-medium text-gray-900">{item.name}</td>

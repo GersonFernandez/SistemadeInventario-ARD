@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { productApi } from '../services/productApi'
 import { inventoryApi } from '../services/inventoryApi'
+import RemoteEntityPicker from '../components/RemoteEntityPicker'
 import { downloadBlob } from '../utils/download'
 import { useAuth } from '../context/AuthContext'
 import { hasPermission } from '../utils/permissions'
@@ -30,11 +31,8 @@ export default function ProductsPage() {
 
   // ── catalogs ──
   const [categories, setCategories]     = useState([])
-  const [brands, setBrands]             = useState([])
-  const [allModels, setAllModels]       = useState([])
   const [states, setStates]             = useState([])
   const [unitMeasures, setUnitMeasures] = useState([])
-  const [locations, setLocations]       = useState([])
 
   // ── list ──
   const [products, setProducts]           = useState([])
@@ -51,6 +49,10 @@ export default function ProductsPage() {
   const [saving, setSaving]       = useState(false)
   const [imageFile, setImageFile] = useState(null)
   const [showForm, setShowForm]   = useState(false)
+  const [selectedCategoryEntity, setSelectedCategoryEntity] = useState(null)
+  const [selectedBrandEntity, setSelectedBrandEntity] = useState(null)
+  const [selectedModelEntity, setSelectedModelEntity] = useState(null)
+  const [selectedLocationEntity, setSelectedLocationEntity] = useState(null)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryDescription, setNewCategoryDescription] = useState('')
   const [creatingCategory, setCreatingCategory] = useState(false)
@@ -62,9 +64,27 @@ export default function ProductsPage() {
     is_active: true,
   })
 
-  const filteredModels = allModels.filter(
-    (m) => !form.brand || String(m.brand) === String(form.brand)
-  )
+  const searchCategories = async (query) => {
+    const { data } = await productApi.getCategories({ search: query, page_size: 50 })
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchBrands = async (query) => {
+    const { data } = await productApi.getBrands({ search: query, is_active: true, page_size: 50 })
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchModels = async (query) => {
+    const params = { search: query, is_active: true, page_size: 50 }
+    if (form.brand) params.brand = form.brand
+    const { data } = await productApi.getProductModels(params)
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
+
+  const searchLocations = async (query) => {
+    const { data } = await productApi.getLocations({ search: query, page_size: 50 })
+    return (data.results || data || []).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+  }
 
   // close report dropdown on outside click
   useEffect(() => {
@@ -79,23 +99,17 @@ export default function ProductsPage() {
   const loadAll = async () => {
     setLoading(true)
     try {
-      const [p, c, b, m, s, u, l] = await Promise.all([
+      const [p, c, s, u] = await Promise.all([
         productApi.getItems({ page_size: 200, is_active: '' }),
         productApi.getCategories(),
-        productApi.getBrands({ is_active: true }),
-        productApi.getProductModels({ is_active: true }),
         productApi.getProductStates({ is_active: true }),
         productApi.getUnitMeasures({ is_active: true }),
-        productApi.getLocations({ page_size: 200 }),
       ])
       const norm = (r) => r.data.results ?? r.data
       setProducts(norm(p))
       setCategories(norm(c))
-      setBrands(norm(b))
-      setAllModels(norm(m))
       setStates(norm(s))
       setUnitMeasures(norm(u))
-      setLocations(norm(l))
     } catch {
       toast.error('No se pudieron cargar los datos de productos')
     } finally {
@@ -177,6 +191,10 @@ export default function ProductsPage() {
       description: '', technical_specs: '', datasheet_url: '',
       is_active: true,
     })
+    setSelectedCategoryEntity(null)
+    setSelectedBrandEntity(null)
+    setSelectedModelEntity(null)
+    setSelectedLocationEntity(null)
     setImageFile(null)
     setShowForm(false)
   }
@@ -250,6 +268,7 @@ export default function ProductsPage() {
         return [...list, createdCategory].sort((a, b) => a.name.localeCompare(b.name))
       })
       setForm((prev) => ({ ...prev, category: String(createdCategory.id) }))
+      setSelectedCategoryEntity(createdCategory)
       setNewCategoryName('')
       setNewCategoryDescription('')
       toast.success('Categoría creada')
@@ -266,9 +285,6 @@ export default function ProductsPage() {
   // When showForm=false → list view with filters
 
   if (showForm) {
-    const selectedBrand = brands.find((b) => String(b.id) === String(form.brand))
-    const selectedModel = filteredModels.find((m) => String(m.id) === String(form.product_model))
-
     return (
       <div className="space-y-6">
         {/* Header */}
@@ -345,11 +361,20 @@ export default function ProductsPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Categoría <span className="text-red-500">*</span></label>
-                    <select value={form.category} onChange={set('category')} required
-                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                      <option value="">Seleccione...</option>
-                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <div className="mt-1">
+                      <RemoteEntityPicker
+                        value={selectedCategoryEntity}
+                        onChange={(row) => {
+                          setSelectedCategoryEntity(row)
+                          setForm((prev) => ({ ...prev, category: row ? String(row.id) : '' }))
+                        }}
+                        fetchOptions={searchCategories}
+                        getLabel={(row) => row?.name || '—'}
+                        getMeta={(row) => row?.abbreviation || 'Sin abreviatura'}
+                        placeholder="Buscar categoría..."
+                        minChars={1}
+                      />
+                    </div>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <input
                         value={newCategoryName}
@@ -376,20 +401,39 @@ export default function ProductsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Marca <span className="text-red-500">*</span></label>
-                    <select value={form.brand} onChange={set('brand')} required
-                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                      <option value="">Seleccione...</option>
-                      {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
+                    <div className="mt-1">
+                      <RemoteEntityPicker
+                        value={selectedBrandEntity}
+                        onChange={(row) => {
+                          setSelectedBrandEntity(row)
+                          setSelectedModelEntity(null)
+                          setForm((prev) => ({ ...prev, brand: row ? String(row.id) : '', product_model: '' }))
+                        }}
+                        fetchOptions={searchBrands}
+                        getLabel={(row) => row?.name || '—'}
+                        getMeta={(row) => (row?.is_active ? 'Activa' : 'Inactiva')}
+                        placeholder="Buscar marca..."
+                        minChars={1}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Modelo <span className="text-red-500">*</span></label>
-                    <select value={form.product_model} onChange={set('product_model')} required
-                      disabled={!form.brand}
-                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500">
-                      <option value="">{form.brand ? 'Seleccione...' : 'Seleccione marca primero...'}</option>
-                      {filteredModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    <div className="mt-1">
+                      <RemoteEntityPicker
+                        value={selectedModelEntity}
+                        onChange={(row) => {
+                          setSelectedModelEntity(row)
+                          setForm((prev) => ({ ...prev, product_model: row ? String(row.id) : '' }))
+                        }}
+                        fetchOptions={searchModels}
+                        getLabel={(row) => row?.name || '—'}
+                        getMeta={(row) => row?.brand_name || 'Sin marca'}
+                        placeholder={form.brand ? 'Buscar modelo...' : 'Seleccione marca primero...'}
+                        minChars={1}
+                        disabled={!form.brand}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Estado</label>
@@ -432,11 +476,20 @@ export default function ProductsPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="md:col-span-2">
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Ubicación de almacenamiento</label>
-                    <select value={form.location} onChange={set('location')}
-                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                      <option value="">Sin ubicación</option>
-                      {locations.map((l) => <option key={l.id} value={l.id}>{l.breadcrumb || l.name}</option>)}
-                    </select>
+                    <div className="mt-1">
+                      <RemoteEntityPicker
+                        value={selectedLocationEntity}
+                        onChange={(row) => {
+                          setSelectedLocationEntity(row)
+                          setForm((prev) => ({ ...prev, location: row ? String(row.id) : '' }))
+                        }}
+                        fetchOptions={searchLocations}
+                        getLabel={(row) => row?.breadcrumb || row?.name || '—'}
+                        getMeta={(row) => row?.codigo || 'Sin código'}
+                        placeholder="Buscar ubicación..."
+                        minChars={1}
+                      />
+                    </div>
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-xs font-semibold uppercase tracking-wide text-gray-600">Imagen del producto</label>
@@ -465,11 +518,11 @@ export default function ProductsPage() {
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-gray-600">Marca</dt>
-                    <dd className="font-medium text-gray-900">{selectedBrand?.name || <span className="text-gray-400">—</span>}</dd>
+                    <dd className="font-medium text-gray-900">{selectedBrandEntity?.name || <span className="text-gray-400">—</span>}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-gray-600">Modelo</dt>
-                    <dd className="font-medium text-gray-900">{selectedModel?.name || <span className="text-gray-400">—</span>}</dd>
+                    <dd className="font-medium text-gray-900">{selectedModelEntity?.name || <span className="text-gray-400">—</span>}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-gray-600">Tipo</dt>

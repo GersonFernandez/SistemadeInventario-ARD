@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { PlusIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { userApi } from '../services/userApi'
 
 const roleLabels = {
@@ -19,18 +19,28 @@ const roleColors = {
 export default function UsersPage() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('true')
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(15)
   const [savingSession, setSavingSession] = useState(false)
 
   useEffect(() => {
     fetchUsers()
     fetchSessionSetting()
-  }, [])
+  }, [roleFilter, statusFilter])
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (overrides = {}) => {
     setLoading(true)
     try {
-      const { data } = await userApi.getUsers()
+      const effectiveSearch = overrides.search ?? search
+      const effectiveRole = overrides.roleFilter ?? roleFilter
+      const effectiveStatus = overrides.statusFilter ?? statusFilter
+      const params = { page_size: 100 }
+      if (effectiveSearch.trim()) params.search = effectiveSearch.trim()
+      if (effectiveRole) params.role = effectiveRole
+      if (effectiveStatus !== '') params.is_active = effectiveStatus
+      const { data } = await userApi.getUsers(params)
       setUsers(data.results || data)
     } catch (error) {
       toast.error('Error al cargar usuarios')
@@ -38,6 +48,15 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSearch = () => fetchUsers()
+
+  const handleReset = () => {
+    setSearch('')
+    setRoleFilter('')
+    setStatusFilter('true')
+    fetchUsers({ search: '', roleFilter: '', statusFilter: 'true' })
   }
 
   const fetchSessionSetting = async () => {
@@ -94,6 +113,39 @@ export default function UsersPage() {
           <PlusIcon className="h-4 w-4" />
           Nuevo usuario
         </Link>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="Buscar por nombre, correo o cédula..."
+              className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm"
+            />
+          </div>
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
+            <option value="">Todos los roles</option>
+            <option value="admin">Administrador</option>
+            <option value="almacenista">Encargado de Inventario</option>
+            <option value="tecnico">Técnico</option>
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
+            <option value="true">Solo activos</option>
+            <option value="false">Solo inactivos</option>
+            <option value="">Todos</option>
+          </select>
+          <div className="flex gap-2">
+            <button onClick={handleSearch} className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white hover:bg-brand-900">Filtrar</button>
+            <button onClick={handleReset} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+              <ArrowPathIcon className="h-4 w-4" /> Limpiar
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
