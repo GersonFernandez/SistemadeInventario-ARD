@@ -660,7 +660,7 @@ export default function ProductsPage() {
                         <span className="text-xs text-gray-600">{p.stock_available ?? 0} disp.</span>
                       ) : (
                         <span className={`text-sm font-bold ${p.is_critical ? 'text-red-600' : 'text-gray-900'}`}>
-                          {p.stock_available ?? p.quantity ?? 0}
+                          {p.stock_available ?? 0}
                           {p.unit_name && <span className="ml-1 text-xs font-normal text-gray-400">{p.unit_name}</span>}
                         </span>
                       )}

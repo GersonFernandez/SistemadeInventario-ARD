@@ -179,7 +179,7 @@ export default function ItemSelector({ onSelect, disabled = false, source = 'inv
                   <span className="text-xs text-gray-700">
                     {item.track_by_serial
                       ? `${item.stock_available} disp. / ${item.units_count} total`
-                      : `${item.stock_available ?? item.quantity} ${item.unit_name || item.unit || ''}`}
+                      : `${item.stock_available} ${item.unit_name || item.unit || ''}`}
                   </span>
                   {source === 'dispatch' && Number(item.received_quantity || 0) > 0 && (
                     <span className="text-[10px] text-gray-500">Recibido: {item.received_quantity}</span>
@@ -203,7 +203,7 @@ export default function ItemSelector({ onSelect, disabled = false, source = 'inv
 
 function QuantitySelector({ item, onConfirm }) {
   const [qty, setQty] = useState(1)
-  const availableStock = Number(item.stock_available ?? item.quantity ?? 0)
+  const availableStock = Number(item.stock_available || 0)
   const canSubmit = qty >= 1 && qty <= availableStock
 
   return (

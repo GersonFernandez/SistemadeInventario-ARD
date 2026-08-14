@@ -119,6 +119,14 @@ export default function ServiceOrderDetailPage() {
         notes: completionForm.notes.trim(),
       })
       toast.success('Orden completada con cierre técnico')
+
+      try {
+        const response = await serviceOrderApi.downloadCompletionReceipt(order.id, 'pdf')
+        downloadBlob(response, `cierre_${order.service_number}.pdf`)
+      } catch {
+        toast.error('La orden se completó, pero no se pudo descargar el comprobante automáticamente')
+      }
+
       closeCompleteModule()
       fetchOrder()
     } catch (error) {

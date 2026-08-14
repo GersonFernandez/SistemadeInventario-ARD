@@ -392,7 +392,7 @@ export default function InventoryPage() {
                         ) : (
                           <div>
                             <span className={`text-sm font-bold ${item.is_critical ? 'text-red-600' : 'text-gray-900'}`}>
-                              {item.stock_available ?? item.quantity ?? 0}
+                              {item.stock_available ?? 0}
                             </span>
                             {item.unit_name && <span className="ml-1 text-xs text-gray-400">{item.unit_name}</span>}
                             {item.minimum_stock > 0 && (

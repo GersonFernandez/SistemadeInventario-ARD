@@ -132,7 +132,7 @@ export default function DespachoFormPage() {
       }
 
       if (!line.item.track_by_serial) {
-        const max = Number(line.item.quantity || 0)
+        const max = Number(line.item.stock_available || 0)
         if (qty > max) {
           toast.error(`La línea ${idx + 1} supera el stock disponible (${max})`)
           return false
@@ -318,12 +318,12 @@ export default function DespachoFormPage() {
                             className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
                           />
                           <p className="mt-1 text-[11px] text-gray-500">
-                            Disponible: {isSerial ? line.item.stock_available : `${line.item.quantity} ${line.item.unit || ''}`}
+                            Disponible: {isSerial ? line.item.stock_available : `${line.item.stock_available || 0} ${line.item.unit_name || line.item.unit || ''}`}
                           </p>
                           <p className="text-[11px] text-gray-500">
                             Quedará: {isSerial
                               ? Math.max(0, Number(line.item.stock_available || 0) - Number(line.quantity || 0))
-                              : `${Math.max(0, Number(line.item.quantity || 0) - Number(line.quantity || 0))} ${line.item.unit || ''}`}
+                              : `${Math.max(0, Number(line.item.stock_available || 0) - Number(line.quantity || 0))} ${line.item.unit_name || line.item.unit || ''}`}
                           </p>
                         </div>
 

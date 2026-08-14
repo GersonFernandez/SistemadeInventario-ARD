@@ -1324,9 +1324,7 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         if len(cleaned) != len(set(cleaned)):
             raise ValueError('Hay seriales duplicados en la misma línea.')
 
-        if tipo == EntradaProducto.Tipo.USADO and not cleaned:
-            cleaned = self._generate_seriales(cantidad, marca, modelo, index_offset)
-        elif cleaned and len(cleaned) != cantidad:
+        if cleaned and len(cleaned) != cantidad:
             raise ValueError('La cantidad de seriales debe coincidir con la cantidad de unidades.')
 
         return cleaned
@@ -1361,10 +1359,66 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
         item = base_product
         if entrada.ubicacion:
             item.location = entrada.ubicacion
-        item.quantity += entrada.cantidad
+
         if entrada.tipo == EntradaProducto.Tipo.USADO:
             item.track_by_serial = True
             item.kind = Item.Kind.HERRAMIENTA
+
+        if item.track_by_serial:
+            target_units = int(entrada.cantidad or 0)
+            existing = set(ItemUnit.objects.filter(item=item).values_list('serial_number', flat=True))
+            incoming_seriales = [s.strip() for s in (entrada.seriales or []) if str(s).strip()]
+
+            # Seriales opcionales: si no llegan, se autogeneran para crear las unidades físicas.
+            if not incoming_seriales:
+                incoming_seriales = self._generate_seriales(
+                    target_units,
+                    entrada.marca.name,
+                    entrada.modelo.name,
+                    index_offset=len(existing) + 1,
+                )
+
+            prepared = []
+            seen = set(existing)
+            for serial in incoming_seriales:
+                normalized = serial.strip()
+                if not normalized or normalized in seen:
+                    continue
+                prepared.append(normalized)
+                seen.add(normalized)
+
+            if len(prepared) < target_units:
+                extra = self._generate_seriales(
+                    target_units * 2,
+                    entrada.marca.name,
+                    entrada.modelo.name,
+                    index_offset=len(existing) + len(prepared) + 1,
+                )
+                for serial in extra:
+                    normalized = serial.strip()
+                    if not normalized or normalized in seen:
+                        continue
+                    prepared.append(normalized)
+                    seen.add(normalized)
+                    if len(prepared) >= target_units:
+                        break
+
+            if len(prepared) != target_units:
+                raise ValueError(
+                    f'No fue posible generar/validar seriales únicos para {item.name}. Intente nuevamente.'
+                )
+
+            for serial in prepared:
+                ItemUnit.objects.create(
+                    item=item,
+                    serial_number=serial,
+                    notes=f"Alta por recepción {entrada.reception_id}",
+                )
+
+            # Para artículos por serial, el stock vive en ItemUnit (quantity no se usa para disponibilidad).
+            item.quantity = 0
+        else:
+            item.quantity += entrada.cantidad
 
         update_fields = ['quantity', 'track_by_serial', 'kind']
         if entrada.ubicacion:
@@ -1379,9 +1433,3 @@ class EntradaProductoViewSet(viewsets.ModelViewSet):
             document_number=entrada.reception_id,
             notes=f"Recepción de mercancía ({entrada.get_tipo_display()})",
         )
-
-        if entrada.seriales and item.track_by_serial:
-            existing = set(ItemUnit.objects.filter(item=item).values_list('serial_number', flat=True))
-            for serial in entrada.seriales:
-                if serial not in existing:
-                    ItemUnit.objects.create(item=item, serial_number=serial, notes=f"Alta por recepción {entrada.reception_id}")

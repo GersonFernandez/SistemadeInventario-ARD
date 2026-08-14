@@ -269,7 +269,7 @@ export default function DashboardPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-2 text-sm text-gray-900">{item.location}</td>
-                    <td className="px-4 py-2 text-sm text-red-600 font-medium">{item.quantity}</td>
+                    <td className="px-4 py-2 text-sm text-red-600 font-medium">{item.stock_available}</td>
                     <td className="px-4 py-2 text-sm text-gray-900">{item.minimum_stock}</td>
                   </tr>
                 ))}
