@@ -74,9 +74,13 @@ export default function SolicitanteFormPage() {
           breadcrumb: data.unit_name || null,
         })
       }
-    } catch {
-      toast.error('No se pudo cargar el solicitante')
-      navigate('/solicitantes')
+    } catch (error) {
+      const detail = error.response?.data?.detail
+      const message = detail || 'No se pudo cargar el solicitante'
+      toast.error(message)
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        navigate('/solicitantes')
+      }
     } finally {
       setLoading(false)
     }

@@ -313,6 +313,12 @@ class SolicitanteAPITest(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['name'], 'Capitán Pérez')
 
+    def test_retrieve_inactive_solicitante(self):
+        solicitante = Solicitante.objects.create(name='Solicitante inactivo', is_active=False)
+        response = self.client.get(f'/api/v1/work-orders/solicitantes/{solicitante.id}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['name'], 'Solicitante inactivo')
+
     def test_create_solicitante(self):
         response = self.client.post('/api/v1/work-orders/solicitantes/', {
             'name': 'Teniente López',

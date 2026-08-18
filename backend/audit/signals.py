@@ -1,8 +1,17 @@
+from django.db import connection
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.migrations.recorder import MigrationRecorder
 from .models import AuditLog
 from .middleware import get_current_request
+
+
+def _audit_table_ready():
+    """Evita registrar cambios durante migraciones o cuando la tabla de auditoría aún no existe."""
+    try:
+        return 'audit_auditlog' in connection.introspection.table_names()
+    except Exception:
+        return False
 
 SENSITIVE_FIELDS = {'password'}
 
@@ -31,7 +40,7 @@ def _format_dirty(instance, dirty):
 
 @receiver(post_save)
 def log_save(sender, instance, created, **kwargs):
-    if sender == AuditLog or sender == MigrationRecorder.Migration:
+    if sender == AuditLog or sender == MigrationRecorder.Migration or not _audit_table_ready():
         return
 
     request = get_current_request()
@@ -59,7 +68,7 @@ def log_save(sender, instance, created, **kwargs):
 
 @receiver(post_delete)
 def log_delete(sender, instance, **kwargs):
-    if sender == AuditLog or sender == MigrationRecorder.Migration:
+    if sender == AuditLog or sender == MigrationRecorder.Migration or not _audit_table_ready():
         return
 
     request = get_current_request()

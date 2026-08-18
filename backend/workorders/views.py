@@ -48,24 +48,28 @@ class SolicitanteViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        is_active = self.request.query_params.get('is_active')
-        search = self.request.query_params.get('search')
 
-        if is_active is not None:
-            if is_active.lower() in ('true', '1'):
+        if self.action == 'list':
+            is_active = self.request.query_params.get('is_active')
+            search = self.request.query_params.get('search')
+
+            if is_active is not None:
+                if is_active.lower() in ('true', '1'):
+                    queryset = queryset.filter(is_active=True)
+                elif is_active.lower() in ('false', '0'):
+                    queryset = queryset.filter(is_active=False)
+            else:
                 queryset = queryset.filter(is_active=True)
-            elif is_active.lower() in ('false', '0'):
-                queryset = queryset.filter(is_active=False)
-        else:
-            queryset = queryset.filter(is_active=True)
 
-        if search:
-            queryset = queryset.filter(
-                Q(name__icontains=search) | Q(rank__icontains=search) | Q(agent_id__icontains=search)
-                | Q(unit__name__icontains=search)
-            )
+            if search:
+                queryset = queryset.filter(
+                    Q(name__icontains=search) | Q(rank__icontains=search) | Q(agent_id__icontains=search)
+                    | Q(unit__name__icontains=search)
+                )
 
-        return queryset.order_by('name')[:50]
+            return queryset.order_by('name')[:50]
+
+        return queryset.order_by('name')
 
     def perform_destroy(self, instance):
         instance.is_active = False

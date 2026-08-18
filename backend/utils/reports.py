@@ -4,8 +4,8 @@ from pathlib import Path
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.drawing.image import Image as XLImage
@@ -40,6 +40,40 @@ def _fit_box(width, height, max_width, max_height):
     return width * scale, height * scale
 
 
+def _cell_text(value):
+    if value is None:
+        return ''
+    return str(value)
+
+
+def _compute_pdf_col_widths(headers, rows):
+    """Calculate widths that adapt to the real content without truncating text."""
+    if not headers:
+        return []
+
+    max_lengths = [len(_cell_text(header)) for header in headers]
+    for row in rows:
+        for index, value in enumerate(row):
+            if index >= len(max_lengths):
+                break
+            max_lengths[index] = max(max_lengths[index], len(_cell_text(value)))
+
+    widths = [max(80, min(260, length * 7.5 + 26)) for length in max_lengths]
+    page_width = 740
+    total_width = sum(widths)
+    if total_width > page_width:
+        factor = page_width / float(total_width)
+        widths = [max(60, width * factor) for width in widths]
+        while sum(widths) > page_width and any(width > 60 for width in widths):
+            for index in range(len(widths) - 1, -1, -1):
+                if widths[index] > 60:
+                    widths[index] = max(60, widths[index] - 10)
+                    break
+            else:
+                break
+    return widths
+
+
 def _build_pdf_response(
     title,
     headers,
@@ -50,15 +84,60 @@ def _build_pdf_response(
     receipt_mode=False,
 ):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        leftMargin=28,
+        rightMargin=28,
+        topMargin=20,
+        bottomMargin=18,
+    )
     styles = getSampleStyleSheet()
     elements = []
-    heading_style = styles['Heading1']
-    heading_style.alignment = TA_CENTER
-    subheading_style = styles['Heading2']
-    subheading_style.alignment = TA_CENTER
-    normal_center_style = styles['Normal']
-    normal_center_style.alignment = TA_CENTER
+
+    heading_style = ParagraphStyle(
+        'HeadingReport',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        textColor=colors.HexColor('#16365d'),
+        alignment=TA_CENTER,
+        spaceAfter=6,
+    )
+    subtitle_style = ParagraphStyle(
+        'SubtitleReport',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#4b5563'),
+        alignment=TA_CENTER,
+        spaceAfter=10,
+    )
+    meta_label_style = ParagraphStyle(
+        'MetaLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8.5,
+        textColor=colors.HexColor('#1f2937'),
+        alignment=TA_LEFT,
+        leading=12,
+    )
+    meta_value_style = ParagraphStyle(
+        'MetaValue',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        textColor=colors.HexColor('#374151'),
+        alignment=TA_LEFT,
+        leading=12,
+    )
+    section_style = ParagraphStyle(
+        'SectionTitle',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        textColor=colors.HexColor('#1f2937'),
+        alignment=TA_CENTER,
+        spaceAfter=6,
+    )
 
     logo_path = _resolve_logo_path()
     header_logo = None
@@ -68,60 +147,107 @@ def _build_pdf_response(
             fitted_width, fitted_height = _fit_box(
                 getattr(header_logo, 'imageWidth', 0),
                 getattr(header_logo, 'imageHeight', 0),
-                min(doc.width, 240),
-                80,
+                min(doc.width, 300),
+                110,
             )
             header_logo.drawWidth = fitted_width
             header_logo.drawHeight = fitted_height
             header_logo.hAlign = 'CENTER'
         except Exception:
-            # If image parsing fails, continue report generation without logo.
             header_logo = None
 
-    header_text = [Paragraph(title, heading_style)]
-    if not receipt_mode:
-        header_text.append(
-            Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_center_style)
-        )
     if header_logo:
+        header_logo.hAlign = 'CENTER'
         elements.append(header_logo)
         elements.append(Spacer(1, 8))
-    elements.extend(header_text)
+        elements.append(Paragraph('''<hr width="90%" color="#16365d" size="1"/>''', subtitle_style))
+        elements.append(Spacer(1, 8))
+
+    elements.append(Paragraph(title, heading_style))
+    elements.append(Paragraph('''<hr width="88%" color="#16365d" size="1"/>''', subtitle_style))
+    if not receipt_mode:
+        elements.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
 
     if metadata_lines:
-        elements.append(Spacer(1, 10))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph('Datos del comprobante', section_style))
+        metadata_rows = []
         for line in metadata_lines:
-            elements.append(Paragraph(line, normal_center_style))
-    elements.append(Spacer(1, 20))
+            if ': ' in line:
+                label, value = line.split(': ', 1)
+            else:
+                label, value = line, ''
+            metadata_rows.append([
+                Paragraph(label, meta_label_style),
+                Paragraph(value if value else '—', meta_value_style),
+            ])
+        metadata_table = Table(metadata_rows, colWidths=[220, 460], hAlign='CENTER')
+        metadata_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dbe2ea')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ]))
+        elements.append(metadata_table)
 
-    data = [headers] + rows
-    table = Table(data, repeatRows=1)
+    elements.append(Spacer(1, 16))
+    elements.append(Paragraph('Detalle de equipos / piezas', section_style))
+
+    table_cell_style = ParagraphStyle(
+        'TableCell',
+        parent=styles['BodyText'],
+        fontSize=8.2,
+        leading=10,
+        alignment=TA_CENTER,
+        wordWrap='CJK',
+    )
+    data = [[Paragraph(_cell_text(header), table_cell_style) for header in headers]]
+    data.extend([
+        [Paragraph(_cell_text(value), table_cell_style) for value in row]
+        for row in rows
+    ])
+    col_widths = _compute_pdf_col_widths(headers, rows)
+    table = Table(data, colWidths=col_widths or None, repeatRows=1, hAlign='CENTER', splitByRow=1, rowHeights=None)
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a5f')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16365d')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f3f4f6')),
-        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#ffffff')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#f8fafc'), colors.HexColor('#ffffff')]),
+        ('GRID', (0, 0), (-1, -1), 0.8, colors.HexColor('#cbd5e1')),
+        ('FONTSIZE', (0, 1), (-1, -1), 8.5),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+        ('LINEABOVE', (0, 1), (-1, 1), 1.2, colors.HexColor('#dbe2ea')),
     ]))
     elements.append(table)
 
     if include_signatures:
-        elements.append(Spacer(1, 28))
+        elements.append(Spacer(1, 22))
         delivered_name = (signature_names or {}).get('delivered_by', '')
         received_name = (signature_names or {}).get('received_by', '')
         signature_headers = ['Entregado por', 'Recibido por']
         signature_rows = [[delivered_name, received_name], ['______________________________', '______________________________']]
-        sig_table = Table([signature_headers] + signature_rows, colWidths=[280, 280])
+        sig_table = Table([signature_headers] + signature_rows, colWidths=[280, 280], hAlign='CENTER')
         sig_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#eef2ff')),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ]))
         elements.append(sig_table)
 
@@ -171,18 +297,24 @@ def _build_excel_response(title, headers, rows, receipt_mode=False):
         ws[f'{title_start_column}{first_title_row + 1}'].alignment = Alignment(horizontal='center')
 
     header_row = first_title_row + 4
+    col_widths = [max(18, len(_cell_text(header)) * 1.8 + 4) for header in headers]
+    for row in rows:
+        for col_idx, value in enumerate(row[:len(headers)], 1):
+            col_widths[col_idx - 1] = max(col_widths[col_idx - 1], max(18, len(_cell_text(value)) * 1.4 + 4))
+
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=header_row, column=col, value=header)
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill(start_color='1E3A5F', end_color='1E3A5F', fill_type='solid')
-        cell.alignment = Alignment(horizontal='center')
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     for row_idx, row in enumerate(rows, header_row + 1):
-        for col_idx, value in enumerate(row, 1):
-            ws.cell(row=row_idx, column=col_idx, value=value)
+        for col_idx, value in enumerate(row[:len(headers)], 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    for col in range(1, len(headers) + 1):
-        ws.column_dimensions[get_column_letter(col)].width = 20
+    for col, width in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(col)].width = min(width, 48)
 
     wb.save(buffer)
     buffer.seek(0)

@@ -2,7 +2,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q, Max
 from django.http import FileResponse
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import uuid
 from rest_framework import viewsets, status, permissions
@@ -330,9 +330,42 @@ class ItemViewSet(viewsets.ModelViewSet):
         only_critical = request.query_params.get('critical', 'false').lower() == 'true'
         only_herramientas = request.query_params.get('kind', '').lower() == 'herramienta'
 
-        # Reutiliza exactamente los mismos filtros del listado
-        # (search, category, location, kind, is_active, critical, etc.).
-        items = list(self.filter_queryset(self.get_queryset()))
+        queryset = self.get_queryset()
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        if date_from:
+            try:
+                queryset = queryset.filter(updated_at__date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+            except ValueError:
+                return Response({'detail': 'La fecha inicial es inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if date_to:
+            try:
+                queryset = queryset.filter(updated_at__date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+            except ValueError:
+                return Response({'detail': 'La fecha final es inválida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not date_from and not date_to:
+            default_window_days = 180
+            cutoff = timezone.now() - timedelta(days=default_window_days)
+            queryset = queryset.filter(updated_at__gte=cutoff)
+
+        items = list(self.filter_queryset(queryset))
+
+        max_rows = 2000
+        try:
+            requested_max_rows = int(request.query_params.get('max_rows', max_rows))
+            if requested_max_rows > 0:
+                max_rows = min(requested_max_rows, 5000)
+        except ValueError:
+            return Response({'detail': 'El parámetro max_rows debe ser un número entero válido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(items) > max_rows:
+            return Response(
+                {'detail': f'El reporte supera el límite seguro de {max_rows} registros. Use un rango de fechas más acotado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         headers = ['Código', 'Nombre', 'SKU', 'Categoría', 'Ubicación', 'Stock', 'Mínimo', 'Unidad', 'Estado']
         rows = [
@@ -344,7 +377,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 item.location.get_breadcrumb() if item.location else '—',
                 item.stock_available,
                 item.minimum_stock,
-                item.unit,
+                item.unit.name if item.unit else '—',
                 'Activo' if item.is_active else 'Inactivo',
             ]
             for item in items

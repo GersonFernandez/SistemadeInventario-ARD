@@ -42,6 +42,8 @@ export default function InventoryPage() {
   const [criticalTotalCount, setCriticalTotalCount] = useState(0)
   const [showReportMenu, setShowReportMenu] = useState(false)
   const [expandedTools, setExpandedTools]  = useState({})
+  const [reportDateFrom, setReportDateFrom] = useState('')
+  const [reportDateTo, setReportDateTo] = useState('')
 
   // ── Filters ──
   const [search,          setSearch]          = useState('')
@@ -150,6 +152,8 @@ export default function InventoryPage() {
       if (filterCritical) activeFilters.critical = filterCritical
       if (filterStatus === 'active') activeFilters.is_active = 'true'
       if (filterStatus === 'inactive') activeFilters.is_active = 'false'
+      if (reportDateFrom) activeFilters.date_from = reportDateFrom
+      if (reportDateTo) activeFilters.date_to = reportDateTo
 
       const response = await inventoryApi.downloadInventoryReport(format, { ...activeFilters, ...filters })
       const ext = format === 'pdf' ? 'pdf' : 'xlsx'
@@ -226,19 +230,32 @@ export default function InventoryPage() {
                   <ChevronDownIcon className="h-3 w-3" />
                 </button>
                 {showReportMenu && (
-                  <div className="absolute right-0 mt-1 w-64 rounded-xl border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
-                    <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-b border-gray-100">Inventario completo</div>
-                    <button onClick={() => { handleDownload('pdf', {}, 'completo'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF completo</button>
-                    <button onClick={() => { handleDownload('excel', {}, 'completo'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel completo</button>
-                    <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-y border-gray-100">Stock crítico</div>
-                    <button onClick={() => { handleDownload('pdf', { critical: 'true' }, 'critico'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm text-red-700 hover:bg-red-50">PDF stock crítico</button>
-                    <button onClick={() => { handleDownload('excel', { critical: 'true' }, 'critico'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm text-red-700 hover:bg-red-50">Excel stock crítico</button>
-                    <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-y border-gray-100">Herramientas</div>
-                    <button onClick={() => { handleDownload('pdf', { kind: 'herramienta' }, 'herramientas'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF herramientas</button>
-                    <button onClick={() => { handleDownload('excel', { kind: 'herramienta' }, 'herramientas'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel herramientas</button>
-                    <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-y border-gray-100">Por ubicación</div>
-                    <button onClick={() => { handleLocationExport('pdf'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">PDF ubicación seleccionada</button>
-                    <button onClick={() => { handleLocationExport('excel'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50">Excel ubicación seleccionada</button>
+                  <div className="absolute right-0 z-50 mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-xl ring-1 ring-black/5 overflow-visible">
+                    <div className="space-y-3 p-3 border-b border-gray-100">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Rango de fechas</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="text-[11px] text-gray-600">
+                          Desde
+                          <input type="date" value={reportDateFrom} onChange={(e) => setReportDateFrom(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                        </label>
+                        <label className="text-[11px] text-gray-600">
+                          Hasta
+                          <input type="date" value={reportDateTo} onChange={(e) => setReportDateTo(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-100">Inventario completo</div>
+                    <button onClick={() => { handleDownload('pdf', {}, 'completo'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50">PDF completo</button>
+                    <button onClick={() => { handleDownload('excel', {}, 'completo'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50">Excel completo</button>
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 border-y border-gray-100">Stock crítico</div>
+                    <button onClick={() => { handleDownload('pdf', { critical: 'true' }, 'critico'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-700 hover:bg-red-50">PDF stock crítico</button>
+                    <button onClick={() => { handleDownload('excel', { critical: 'true' }, 'critico'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-red-700 hover:bg-red-50">Excel stock crítico</button>
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 border-y border-gray-100">Herramientas</div>
+                    <button onClick={() => { handleDownload('pdf', { kind: 'herramienta' }, 'herramientas'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50">PDF herramientas</button>
+                    <button onClick={() => { handleDownload('excel', { kind: 'herramienta' }, 'herramientas'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50">Excel herramientas</button>
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 border-y border-gray-100">Por ubicación</div>
+                    <button onClick={() => { handleLocationExport('pdf'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50">PDF ubicación seleccionada</button>
+                    <button onClick={() => { handleLocationExport('excel'); setShowReportMenu(false) }} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50">Excel ubicación seleccionada</button>
                   </div>
                 )}
               </div>

@@ -6,6 +6,8 @@ from .models import Category, Item, StockMovement, Location, LocationType, Trans
 from django.utils import timezone
 from datetime import timedelta
 
+from utils.reports import _compute_pdf_col_widths
+
 User = get_user_model()
 
 
@@ -124,6 +126,17 @@ class TransferModelTest(TestCase):
         self.assertEqual(transfer.status, Transfer.Status.PENDIENTE)
         self.assertEqual(transfer.requested_by, self.admin)
         self.assertIn('→', str(transfer))
+
+
+class ReportUtilTest(TestCase):
+    def test_compute_pdf_col_widths_does_not_loop_forever_on_overflow(self):
+        headers = ['Código', 'Nombre', 'SKU', 'Categoría', 'Ubicación', 'Stock', 'Mínimo', 'Unidad', 'Estado']
+        rows = [[('x' * 180), ('y' * 180), ('z' * 180), ('w' * 180), ('q' * 180), ('r' * 180), ('s' * 180), ('t' * 180), ('u' * 180)]]
+
+        widths = _compute_pdf_col_widths(headers, rows)
+        self.assertTrue(len(widths) == len(headers))
+        self.assertTrue(all(width >= 60 for width in widths))
+        self.assertTrue(sum(widths) <= 740)
 
 
 class InventoryAPITest(APITestCase):

@@ -2,13 +2,18 @@ from django.db import migrations
 
 
 def add_state_snapshot_column(apps, schema_editor):
+    table_name = 'inventory_installationrecord'
+
     if schema_editor.connection.vendor != 'sqlite':
-        schema_editor.execute("ALTER TABLE inventory_installationrecord ADD COLUMN IF NOT EXISTS state_snapshot varchar(100) NOT NULL DEFAULT ''")
+        schema_editor.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS state_snapshot varchar(100) NOT NULL DEFAULT ''"
+        )
         return
 
-    table_name = 'inventory_installationrecord'
-    columns = schema_editor.connection.introspection.get_columns(table_name)
-    if any(column['name'] == 'state_snapshot' for column in columns):
+    cursor = schema_editor.connection.cursor()
+    cursor.execute(f'PRAGMA table_info({table_name})')
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'state_snapshot' in columns:
         return
 
     schema_editor.execute(f'ALTER TABLE {table_name} ADD COLUMN state_snapshot varchar(100) NOT NULL DEFAULT ""')
